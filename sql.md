@@ -1,3 +1,36 @@
+## Step 3 — Approval System (run after Step 2)
+
+```sql
+-- Add approval status to profiles
+alter table profiles add column status text not null default 'pending'
+  check (status in ('pending', 'approved'));
+
+-- Trigger: auto-approves owner email, all others start as pending
+create or replace function handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id, name, role, status)
+  values (
+    new.id,
+    new.raw_user_meta_data->>'name',
+    case when new.email = 'shanjeevsivasankar@gmail.com' then 'owner' else new.raw_user_meta_data->>'role' end,
+    case when new.email = 'shanjeevsivasankar@gmail.com' then 'approved' else 'pending' end
+  );
+  return new;
+end;
+$$ language plpgsql security definer;
+
+-- Allow Shanju to approve/reject users
+create policy "profiles_update" on profiles for update
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
+
+create policy "profiles_delete" on profiles for delete
+  using (auth.role() = 'authenticated');
+```
+
+---
+
 ## Step 2 — Auth & Roles (run this AFTER Step 1)
 
 Run this in your Supabase **SQL Editor**:

@@ -56,16 +56,20 @@ function toast(msg, dur = 2500) {
 // ---- 3. DATABASE FUNCTIONS ----
 async function loadAll() {
   try {
-    const [t, s, p, pl, pay, inv] = await Promise.all([
+    const queries = [
       sb.from('tasks').select('*').order('created_at', { ascending: false }),
       sb.from('shoots').select('*').order('date'),
       sb.from('posts').select('*').order('date'),
       sb.from('pipeline').select('*'),
       sb.from('payments').select('*').order('created_at', { ascending: false }),
       sb.from('invoices').select('*').order('created_at', { ascending: false }),
-    ]);
+    ];
+    const [t, s, p, pl, pay, inv] = await Promise.all(queries);
     tasks = t.data || []; shoots = s.data || []; posts = p.data || [];
     pipeline = pl.data || []; payments = pay.data || []; invoices = inv.data || [];
+
+    await loadPendingUsers(); // owner only — no-op for others
+
     setSynced();
     renderPage(document.querySelector('.page.active')?.id.replace('page-', ''));
     updatePayNotif();
@@ -184,6 +188,13 @@ async function loadProfile(user) {
     await sb.auth.signOut();
     return;
   }
+
+  // Account not yet approved — show waiting screen
+  if (profile.status === 'pending') {
+    showPendingScreen();
+    return;
+  }
+
   currentProfile = profile;
   currentUser    = profile.name;
 
@@ -219,13 +230,21 @@ async function loadProfile(user) {
 
 function showLoginScreen() {
   currentProfile = null;
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('app-shell').style.display    = 'none';
+  document.getElementById('login-screen').style.display   = 'flex';
+  document.getElementById('pending-screen').style.display = 'none';
+  document.getElementById('app-shell').style.display      = 'none';
+}
+
+function showPendingScreen() {
+  document.getElementById('login-screen').style.display   = 'none';
+  document.getElementById('pending-screen').style.display = 'flex';
+  document.getElementById('app-shell').style.display      = 'none';
 }
 
 function showApp() {
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app-shell').style.display    = 'flex';
+  document.getElementById('login-screen').style.display   = 'none';
+  document.getElementById('pending-screen').style.display = 'none';
+  document.getElementById('app-shell').style.display      = 'flex';
 }
 
 function showLoginError(msg) {
@@ -248,19 +267,17 @@ async function doLogin() {
 
 async function doSignup() {
   const name     = document.getElementById('signup-name').value;
+  const role     = document.getElementById('signup-role-select').value;
   const email    = document.getElementById('signup-email').value.trim();
   const password = document.getElementById('signup-password').value;
   const errEl    = document.getElementById('signup-error');
   errEl.style.display = 'none';
 
-  if (!name || !email || !password) { errEl.textContent = 'All fields are required.'; errEl.style.display = 'block'; return; }
-  if (password.length < 6)          { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
+  if (!name)            { errEl.textContent = 'Please enter your name.'; errEl.style.display = 'block'; return; }
+  if (!email || !password) { errEl.textContent = 'All fields are required.'; errEl.style.display = 'block'; return; }
+  if (password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
 
-  // Auto-assign role based on name
-  const roleMap = { Shanju: 'owner', Bava: 'admin' };
-  const role    = roleMap[name] || 'editor';
-
-  // Pass name + role as metadata — the database trigger creates the profile automatically
+  // Pass name + role as metadata — DB trigger creates the profile (status = pending)
   const { error } = await sb.auth.signUp({
     email,
     password,
@@ -268,17 +285,31 @@ async function doSignup() {
   });
   if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
 
-  toast('Account created! You can now sign in.');
+  toast('Request sent! Waiting for Shanju to approve your account.');
   switchLoginTab('login');
 }
 
-function updateSignupRole() {
-  const name    = document.getElementById('signup-name').value;
-  const roleMap = { Shanju: 'owner', Bava: 'admin' };
-  const role    = roleMap[name] || 'editor';
-  document.getElementById('signup-role-display').value = role;
-  document.getElementById('signup-role-pill').innerHTML =
-    name ? `<span class="login-role-pill ${role}">${role}</span>` : '';
+// ---- APPROVAL FUNCTIONS (owner only) ----
+let pendingUsers = [];
+
+async function loadPendingUsers() {
+  if (currentProfile?.role !== 'owner') return;
+  const { data } = await sb.from('profiles').select('*').eq('status', 'pending');
+  pendingUsers = data || [];
+}
+
+async function approveUser(id) {
+  await dbUpdate('profiles', id, { status: 'approved' });
+  pendingUsers = pendingUsers.filter(u => u.id !== id);
+  toast('User approved!');
+  renderDash();
+}
+
+async function rejectUser(id) {
+  if (!confirm('Remove this access request?')) return;
+  await dbDelete('profiles', id);
+  pendingUsers = pendingUsers.filter(u => u.id !== id);
+  renderDash();
 }
 
 function switchLoginTab(tab) {
@@ -296,6 +327,27 @@ async function doLogout() {
 
 // ---- 6. DASHBOARD ----
 function renderDash() {
+  // Pending approvals card (owner only)
+  const approvalCard = document.getElementById('pending-approvals-card');
+  if (currentProfile?.role === 'owner' && pendingUsers.length > 0) {
+    approvalCard.style.display = 'block';
+    document.getElementById('pending-count').textContent = `${pendingUsers.length} pending`;
+    document.getElementById('pending-approvals-list').innerHTML = pendingUsers.map(u => `
+      <div class="alert-row">
+        <div class="adot adot-yellow"></div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;">${u.name}</div>
+          <div style="font-size:12px;color:var(--muted);">Requested role: <strong>${u.role}</strong></div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm btn-primary" onclick="approveUser('${u.id}')">✓ Approve</button>
+          <button class="btn btn-sm btn-danger"  onclick="rejectUser('${u.id}')">✕ Reject</button>
+        </div>
+      </div>`).join('');
+  } else {
+    approvalCard.style.display = 'none';
+  }
+
   document.getElementById('dash-title').textContent = currentUser === 'Shanju' ? 'Founder Dashboard' : `${currentUser}'s Dashboard`;
   document.getElementById('dash-sub').textContent   = currentUser === 'Shanju' ? 'Full company overview' : 'Your personal workspace';
   document.getElementById('focus-title').textContent = currentUser === 'Shanju' ? '🎯 Founder Focus Today' : '🎯 My Focus Today';
@@ -383,7 +435,10 @@ function renderMyTasks() {
         <td>${ddPill(t.deadline)}</td><td>${statusPill(t.status)}</td>
         <td style="font-size:11px;color:${t.blocker && t.blocker !== 'None' ? 'var(--warning)' : 'var(--muted)'};">${t.blocker || '—'}</td>
         <td style="font-size:11px;color:var(--muted);">${t.next_step || ''}</td>
-        <td><button class="btn btn-sm" onclick="markDone('${t.id}')">✓ Done</button></td>
+        <td style="display:flex;gap:4px;">
+          <button class="btn btn-sm" onclick="markDone('${t.id}')">✓ Done</button>
+          ${currentProfile?.role === 'owner' ? `<button class="btn btn-sm btn-danger" onclick="deleteTask('${t.id}')">✕</button>` : ''}
+        </td>
       </tr>`).join('')
     : `<tr><td colspan="8" class="empty-state">No active tasks 🎉</td></tr>`;
 

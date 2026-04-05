@@ -16,6 +16,20 @@
 <div class="toast" id="toast"></div>
 
 <!-- =====================================================
+     PENDING APPROVAL SCREEN
+     ===================================================== -->
+<div class="login-screen" id="pending-screen" style="display:none;">
+  <div class="login-card" style="text-align:center;">
+    <div style="font-size:48px;margin-bottom:16px;">⏳</div>
+    <div class="login-logo-name">Waiting for Approval</div>
+    <div class="login-logo-sub" style="margin-top:8px;line-height:1.6;">
+      Your account is pending.<br>Shanju will approve your access shortly.
+    </div>
+    <button class="btn" style="margin-top:24px;width:100%;" onclick="doLogout()">Sign Out</button>
+  </div>
+</div>
+
+<!-- =====================================================
      LOGIN SCREEN (shown until user authenticates)
      ===================================================== -->
 <div class="login-screen" id="login-screen">
@@ -42,26 +56,18 @@
 
     <!-- Sign Up form -->
     <div id="signup-form" style="display:none;">
+      <div class="fg"><label>Your Name</label><input type="text" id="signup-name" placeholder="e.g. Bharath"></div>
       <div class="fg">
-        <label>Your Name</label>
-        <select id="signup-name" onchange="updateSignupRole()">
-          <option value="">Select your name</option>
-          <option value="Shanju">Shanju</option>
-          <option value="Bharath">Bharath</option>
-          <option value="Minhaaj">Minhaaj</option>
-          <option value="Gowtham">Gowtham</option>
-          <option value="Bava">Bava</option>
+        <label>Your Role</label>
+        <select id="signup-role-select">
+          <option value="editor">Editor</option>
+          <option value="admin">Admin</option>
         </select>
-      </div>
-      <div class="fg">
-        <label>Role <span id="signup-role-pill"></span></label>
-        <input type="text" id="signup-role-display" readonly placeholder="Select your name first"
-          style="background:#faf9ff;color:var(--muted);cursor:default;">
       </div>
       <div class="fg"><label>Email</label><input type="email" id="signup-email" placeholder="your@email.com"></div>
       <div class="fg"><label>Password</label><input type="password" id="signup-password" placeholder="Min 6 characters"></div>
       <div class="login-error" id="signup-error"></div>
-      <button class="btn btn-primary" style="width:100%;margin-top:4px;" onclick="doSignup()">Create Account</button>
+      <button class="btn btn-primary" style="width:100%;margin-top:4px;" onclick="doSignup()">Request Access</button>
     </div>
   </div>
 </div>
@@ -146,6 +152,15 @@
         </div>
         <button class="btn btn-primary btn-sm" onclick="openModal('modal-task')">+ Add Task</button>
       </div>
+      <!-- Pending approvals — only visible to Shanju when there are pending users -->
+      <div class="card" id="pending-approvals-card" style="display:none;border:2px solid var(--warning);">
+        <div class="card-header">
+          <span class="card-title">🔔 Pending Approvals</span>
+          <span class="pill pill-warning" id="pending-count"></span>
+        </div>
+        <div class="card-body" id="pending-approvals-list"></div>
+      </div>
+
       <div class="metric-grid" id="dash-metrics">
         <div class="loading"><div class="spinner"></div>Loading...</div>
       </div>
