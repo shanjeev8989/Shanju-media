@@ -1,0 +1,3 @@
+# Never commit these — they contain secret credentials
+.env
+config.js
