@@ -16,9 +16,60 @@
 <div class="toast" id="toast"></div>
 
 <!-- =====================================================
-     LAYOUT — Sidebar + main content area
+     LOGIN SCREEN (shown until user authenticates)
      ===================================================== -->
-<div class="shell">
+<div class="login-screen" id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-name">Shanju Media</div>
+      <div class="login-logo-sub">Ops &amp; Team Hub</div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="login-tabs">
+      <button class="login-tab active" onclick="switchLoginTab('login')">Sign In</button>
+      <button class="login-tab"        onclick="switchLoginTab('signup')">Sign Up</button>
+    </div>
+
+    <!-- Sign In form -->
+    <div id="login-form">
+      <div class="fg"><label>Email</label><input type="email" id="auth-email" placeholder="your@email.com"></div>
+      <div class="fg"><label>Password</label><input type="password" id="auth-password" placeholder="••••••••"
+        onkeydown="if(event.key==='Enter') doLogin()"></div>
+      <div class="login-error" id="login-error"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:4px;" onclick="doLogin()">Sign In</button>
+    </div>
+
+    <!-- Sign Up form -->
+    <div id="signup-form" style="display:none;">
+      <div class="fg">
+        <label>Your Name</label>
+        <select id="signup-name" onchange="updateSignupRole()">
+          <option value="">Select your name</option>
+          <option value="Shanju">Shanju</option>
+          <option value="Bharath">Bharath</option>
+          <option value="Minhaaj">Minhaaj</option>
+          <option value="Gowtham">Gowtham</option>
+          <option value="Bava">Bava</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Role <span id="signup-role-pill"></span></label>
+        <input type="text" id="signup-role-display" readonly placeholder="Select your name first"
+          style="background:#faf9ff;color:var(--muted);cursor:default;">
+      </div>
+      <div class="fg"><label>Email</label><input type="email" id="signup-email" placeholder="your@email.com"></div>
+      <div class="fg"><label>Password</label><input type="password" id="signup-password" placeholder="Min 6 characters"></div>
+      <div class="login-error" id="signup-error"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:4px;" onclick="doSignup()">Create Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================
+     LAYOUT — Sidebar + main content area (hidden until login)
+     ===================================================== -->
+<div class="shell" id="app-shell" style="display:none;">
 
   <!-- SIDEBAR (left navigation) -->
   <div class="sidebar">
@@ -27,15 +78,23 @@
       <div class="sub">Ops &amp; Team Hub</div>
     </div>
 
-    <!-- Who is currently viewing? -->
-    <div class="sidebar-user">
-      <select class="user-sel" id="current-user" onchange="switchUser()">
-        <option value="Shanju">👑 Shanju (Founder)</option>
-        <option value="Bharath">🎬 Bharath (QC Lead)</option>
-        <option value="Minhaaj">✂️ Minhaaj (Editor)</option>
-        <option value="Gowtham">📸 Gowtham (Videographer)</option>
-        <option value="Bava">📦 Bava (Post Production)</option>
-      </select>
+    <!-- Logged-in user info -->
+    <div class="auth-info">
+      <div class="auth-info-name" id="auth-user-name"></div>
+      <div class="auth-info-role" id="auth-user-role"></div>
+    </div>
+
+    <!-- View-as switcher (owner only — hidden for others) -->
+    <div id="user-switcher-wrap" style="display:none;">
+      <div class="sidebar-user">
+        <select class="user-sel" id="current-user" onchange="switchUser()">
+          <option value="Shanju">👑 Shanju (Founder)</option>
+          <option value="Bharath">🎬 Bharath (QC Lead)</option>
+          <option value="Minhaaj">✂️ Minhaaj (Editor)</option>
+          <option value="Gowtham">📸 Gowtham (Videographer)</option>
+          <option value="Bava">📦 Bava (Post Production)</option>
+        </select>
+      </div>
     </div>
 
     <!-- Navigation links -->
@@ -43,28 +102,32 @@
     <div class="nav-item active" onclick="nav('dashboard',this)"><span class="nav-icon">🏠</span> Dashboard</div>
     <div class="nav-item"        onclick="nav('my-tasks',this)"><span class="nav-icon">✅</span> My Tasks</div>
 
-    <div class="nav-section">Work</div>
-    <div class="nav-item" onclick="nav('all-tasks',this)"><span class="nav-icon">📋</span> All Tasks</div>
-    <div class="nav-item" onclick="nav('kanban',this)">   <span class="nav-icon">🗂️</span> Kanban Board</div>
-    <div class="nav-item" onclick="nav('team',this)">     <span class="nav-icon">👥</span> Team View</div>
+    <div class="nav-section" data-section="work">Work</div>
+    <div class="nav-item" data-section="work" onclick="nav('all-tasks',this)"><span class="nav-icon">📋</span> All Tasks</div>
+    <div class="nav-item" data-section="work" onclick="nav('kanban',this)">   <span class="nav-icon">🗂️</span> Kanban Board</div>
+    <div class="nav-item" data-section="work" onclick="nav('team',this)">     <span class="nav-icon">👥</span> Team View</div>
 
-    <div class="nav-section">Planning</div>
-    <div class="nav-item" onclick="nav('shoot-cal',this)"><span class="nav-icon">📷</span> Shoot Calendar</div>
-    <div class="nav-item" onclick="nav('post-cal',this)"> <span class="nav-icon">📅</span> Post Calendar</div>
-    <div class="nav-item" onclick="nav('pipeline',this)"> <span class="nav-icon">🚀</span> Post Pipeline</div>
+    <div class="nav-section" data-section="planning">Planning</div>
+    <div class="nav-item" data-section="planning" onclick="nav('shoot-cal',this)"><span class="nav-icon">📷</span> Shoot Calendar</div>
+    <div class="nav-item" data-section="planning" onclick="nav('post-cal',this)"> <span class="nav-icon">📅</span> Post Calendar</div>
+    <div class="nav-item" data-section="planning" onclick="nav('pipeline',this)"> <span class="nav-icon">🚀</span> Post Pipeline</div>
 
-    <div class="nav-section">Finance</div>
-    <div class="nav-item" onclick="nav('payments',this)">
+    <div class="nav-section" data-section="finance">Finance</div>
+    <div class="nav-item" data-section="finance" onclick="nav('payments',this)">
       <span class="nav-icon">💰</span> Payments
       <span class="notif" id="pay-notif" style="display:none;"></span>
     </div>
-    <div class="nav-item" onclick="nav('invoices',this)"><span class="nav-icon">🧾</span> Invoices</div>
+    <div class="nav-item" data-section="finance" onclick="nav('invoices',this)"><span class="nav-icon">🧾</span> Invoices</div>
 
     <div class="sidebar-footer">
       <div class="sync-status">
         <span class="sync-dot" id="sync-dot"></span>
         <span id="sync-label">Connected</span>
       </div>
+      <button class="btn btn-sm" onclick="doLogout()"
+        style="margin-top:8px;width:100%;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.8);border-color:rgba(255,255,255,0.2);">
+        Sign Out
+      </button>
     </div>
   </div><!-- end sidebar -->
 

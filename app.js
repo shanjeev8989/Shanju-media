@@ -27,6 +27,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let tasks = [], shoots = [], posts = [], pipeline = [], payments = [], invoices = [];
 let currentUser = 'Shanju';
+let currentProfile = null; // { id, name, role }  — set after login
 let shootCalMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let postCalMonth  = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 const TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
@@ -157,7 +158,143 @@ function ddPill(d) {
 }
 
 
-// ---- 5. DASHBOARD ----
+// ---- 5. AUTH ----
+
+// Role permissions:
+//   owner  (Shanju) → everything including Finance
+//   admin  (Bava)   → everything EXCEPT Finance
+//   editor (others) → Dashboard + My Tasks only
+
+async function initAuth() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    await loadProfile(session.user);
+  }
+  // Listen for future sign-in / sign-out events
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN')  await loadProfile(session.user);
+    if (event === 'SIGNED_OUT') showLoginScreen();
+  });
+}
+
+async function loadProfile(user) {
+  const { data: profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  if (error || !profile) {
+    showLoginError('Profile not found. Ask Shanju to create your account.');
+    await sb.auth.signOut();
+    return;
+  }
+  currentProfile = profile;
+  currentUser    = profile.name;
+
+  // Update sidebar user info
+  document.getElementById('auth-user-name').textContent = profile.name;
+  document.getElementById('auth-user-role').textContent = profile.role;
+
+  // Show view-as switcher only for owner
+  if (profile.role === 'owner') {
+    document.getElementById('user-switcher-wrap').style.display = 'block';
+    document.getElementById('current-user').value = profile.name;
+  }
+
+  // Hide nav sections based on role
+  if (profile.role !== 'owner') {
+    document.querySelectorAll('[data-section="finance"]').forEach(el => el.style.display = 'none');
+  }
+  if (profile.role === 'editor') {
+    document.querySelectorAll('[data-section="work"], [data-section="planning"]').forEach(el => el.style.display = 'none');
+  }
+
+  // Set today's date in all date fields
+  const todayStr = new Date().toISOString().split('T')[0];
+  ['t-deadline','sh-date','po-date','pay-due','inv-date','inv-due'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = todayStr;
+  });
+
+  showApp();
+  loadAll();
+  setupRealtime();
+}
+
+function showLoginScreen() {
+  currentProfile = null;
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-shell').style.display    = 'none';
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-shell').style.display    = 'flex';
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent    = msg;
+  el.style.display  = 'block';
+}
+
+async function doLogin() {
+  const email    = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const errEl    = document.getElementById('login-error');
+  errEl.style.display = 'none';
+
+  if (!email || !password) { errEl.textContent = 'Email and password are required.'; errEl.style.display = 'block'; return; }
+
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; }
+}
+
+async function doSignup() {
+  const name     = document.getElementById('signup-name').value;
+  const email    = document.getElementById('signup-email').value.trim();
+  const password = document.getElementById('signup-password').value;
+  const errEl    = document.getElementById('signup-error');
+  errEl.style.display = 'none';
+
+  if (!name || !email || !password) { errEl.textContent = 'All fields are required.'; errEl.style.display = 'block'; return; }
+  if (password.length < 6)          { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
+
+  // Auto-assign role based on name
+  const roleMap = { Shanju: 'owner', Bava: 'admin' };
+  const role    = roleMap[name] || 'editor';
+
+  // Pass name + role as metadata — the database trigger creates the profile automatically
+  const { error } = await sb.auth.signUp({
+    email,
+    password,
+    options: { data: { name, role } },
+  });
+  if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+
+  toast('Account created! You can now sign in.');
+  switchLoginTab('login');
+}
+
+function updateSignupRole() {
+  const name    = document.getElementById('signup-name').value;
+  const roleMap = { Shanju: 'owner', Bava: 'admin' };
+  const role    = roleMap[name] || 'editor';
+  document.getElementById('signup-role-display').value = role;
+  document.getElementById('signup-role-pill').innerHTML =
+    name ? `<span class="login-role-pill ${role}">${role}</span>` : '';
+}
+
+function switchLoginTab(tab) {
+  document.getElementById('login-form').style.display  = tab === 'login'  ? 'block' : 'none';
+  document.getElementById('signup-form').style.display = tab === 'signup' ? 'block' : 'none';
+  document.querySelectorAll('.login-tab').forEach((t, i) =>
+    t.classList.toggle('active', i === (tab === 'login' ? 0 : 1))
+  );
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+}
+
+
+// ---- 6. DASHBOARD ----
 function renderDash() {
   document.getElementById('dash-title').textContent = currentUser === 'Shanju' ? 'Founder Dashboard' : `${currentUser}'s Dashboard`;
   document.getElementById('dash-sub').textContent   = currentUser === 'Shanju' ? 'Full company overview' : 'Your personal workspace';
@@ -663,19 +800,12 @@ async function saveInvoice() {
 }
 
 
-// ---- 16. REALTIME + INIT ----
+// ---- 17. REALTIME + INIT ----
 function setupRealtime() {
   sb.channel('db-changes')
     .on('postgres_changes', { event: '*', schema: 'public' }, () => { loadAll(); })
     .subscribe();
 }
 
-// Set today's date as default in all date fields
-const todayStr = new Date().toISOString().split('T')[0];
-['t-deadline','sh-date','po-date','pay-due','inv-date','inv-due'].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.value = todayStr;
-});
-
-loadAll();
-setupRealtime();
+// Start by checking if the user is already logged in
+initAuth();
