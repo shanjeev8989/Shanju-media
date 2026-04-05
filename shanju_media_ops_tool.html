@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --p50:#f5f3ff;--p100:#ede9fe;--p200:#ddd6fe;--p300:#c4b5fd;--p400:#a78bfa;--p500:#8b5cf6;--p600:#7c3aed;--p700:#6d28d9;--p800:#5b21b6;--p900:#4c1d95;
+  --w:#ffffff;--bg:#f8f7ff;--border:#e8e4f8;--text:#1e1b4b;--muted:#6b7280;--danger:#ef4444;--warning:#f59e0b;--success:#10b981;--info:#3b82f6;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+/* Layout */
+.shell{display:flex;min-height:100vh;}
+.sidebar{width:220px;background:linear-gradient(180deg,var(--p900) 0%,var(--p700) 100%);flex-shrink:0;display:flex;flex-direction:column;padding:0;}
+.sidebar-logo{padding:20px 16px 16px;border-bottom:1px solid rgba(255,255,255,0.1);}
+.sidebar-logo .name{font-size:15px;font-weight:700;color:#fff;letter-spacing:0.02em;}
+.sidebar-logo .sub{font-size:11px;color:var(--p300);margin-top:2px;}
+.sidebar-user{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.1);}
+.user-sel{width:100%;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:#fff;padding:7px 10px;font-size:12px;cursor:pointer;outline:none;}
+.user-sel option{background:#4c1d95;color:#fff;}
+.nav-section{padding:12px 8px 4px;font-size:10px;color:var(--p300);font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 16px;margin:1px 8px;border-radius:8px;cursor:pointer;color:rgba(255,255,255,0.75);font-size:13px;transition:all 0.15s;}
+.nav-item:hover{background:rgba(255,255,255,0.1);color:#fff;}
+.nav-item.active{background:rgba(255,255,255,0.18);color:#fff;font-weight:500;}
+.nav-icon{font-size:15px;width:18px;text-align:center;}
+.sidebar-footer{margin-top:auto;padding:16px;border-top:1px solid rgba(255,255,255,0.1);}
+.sidebar-footer .ver{font-size:11px;color:var(--p300);}
+
+.content{flex:1;overflow-y:auto;padding:24px;}
+.page{display:none;}
+.page.active{display:block;}
+
+/* Top bar */
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;}
+.page-title{font-size:20px;font-weight:700;color:var(--p900);}
+.page-sub{font-size:13px;color:var(--muted);margin-top:2px;}
+
+/* Metric cards */
+.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;}
+.mcard{background:var(--w);border-radius:12px;padding:14px 16px;border:1px solid var(--border);position:relative;overflow:hidden;}
+.mcard::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+.mcard.purple::before{background:var(--p500);}
+.mcard.danger::before{background:var(--danger);}
+.mcard.warning::before{background:var(--warning);}
+.mcard.success::before{background:var(--success);}
+.mcard.info::before{background:var(--info);}
+.mcard-label{font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:0.04em;}
+.mcard-val{font-size:26px;font-weight:700;margin-top:4px;color:var(--p900);}
+.mcard-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+
+/* Cards */
+.card{background:var(--w);border-radius:14px;border:1px solid var(--border);margin-bottom:16px;overflow:hidden;}
+.card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.card-title{font-size:14px;font-weight:600;color:var(--p900);}
+.card-body{padding:16px 18px;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:700px){.row2{grid-template-columns:1fr;}.sidebar{display:none;}.content{padding:12px;}}
+
+/* Buttons */
+.btn{padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--w);color:var(--text);transition:all 0.15s;font-family:inherit;}
+.btn:hover{background:var(--p50);border-color:var(--p300);}
+.btn-primary{background:var(--p600);color:#fff;border-color:var(--p600);}
+.btn-primary:hover{background:var(--p700);}
+.btn-danger{background:#fee2e2;color:var(--danger);border-color:#fca5a5;}
+.btn-danger:hover{background:#fecaca;}
+.btn-sm{padding:4px 10px;font-size:11px;}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+
+/* Pills */
+.pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;}
+.pill-purple{background:var(--p100);color:var(--p700);}
+.pill-danger{background:#fee2e2;color:#b91c1c;}
+.pill-warning{background:#fef3c7;color:#92400e;}
+.pill-success{background:#d1fae5;color:#065f46;}
+.pill-info{background:#dbeafe;color:#1e40af;}
+.pill-neutral{background:#f3f4f6;color:#374151;}
+
+/* Avatars */
+.avatar{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;}
+.av-S{background:var(--p100);color:var(--p700);}
+.av-B{background:#dbeafe;color:#1e40af;}
+.av-M{background:#d1fae5;color:#065f46;}
+.av-G{background:#fef3c7;color:#92400e;}
+.av-V{background:#fce7f3;color:#9d174d;}
+
+/* Table */
+.tbl-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:600px;}
+th{padding:9px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);background:#faf9ff;}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:#faf9ff;}
+
+/* Forms */
+.fg{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
+.fg label{font-size:12px;font-weight:500;color:var(--p800);}
+.fg input,.fg select,.fg textarea{padding:8px 12px;border-radius:8px;border:1px solid var(--border);font-size:13px;font-family:inherit;color:var(--text);background:var(--w);outline:none;transition:border 0.15s;}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--p400);box-shadow:0 0 0 3px var(--p100);}
+.fg textarea{resize:vertical;min-height:80px;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+
+/* Calendar */
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.cal-nav{display:flex;gap:8px;align-items:center;}
+.cal-month{font-size:15px;font-weight:600;color:var(--p900);}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.cal-dow{text-align:center;font-size:10px;font-weight:600;color:var(--muted);padding:4px 0;text-transform:uppercase;}
+.cal-day{min-height:52px;border-radius:8px;border:1px solid var(--border);padding:4px;cursor:pointer;background:var(--w);transition:all 0.15s;position:relative;}
+.cal-day:hover{border-color:var(--p400);background:var(--p50);}
+.cal-day.today{border-color:var(--p500);background:var(--p50);}
+.cal-day.empty{background:transparent;border-color:transparent;cursor:default;}
+.cal-day-num{font-size:11px;font-weight:500;color:var(--text);}
+.cal-dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin:1px;}
+.cal-dot.shoot{background:var(--p500);}
+.cal-dot.post{background:var(--success);}
+.cal-dot.meeting{background:var(--info);}
+.cal-dots{display:flex;flex-wrap:wrap;gap:1px;margin-top:2px;}
+.cal-events{font-size:9px;color:var(--p700);margin-top:1px;line-height:1.3;}
+
+/* Kanban */
+.kanban{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;}
+.kanban-col{background:#faf9ff;border-radius:12px;padding:12px;border:1px solid var(--border);}
+.kanban-col-title{font-size:12px;font-weight:600;color:var(--p800);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
+.kanban-count{background:var(--p200);color:var(--p800);border-radius:20px;padding:1px 7px;font-size:10px;}
+.kanban-card{background:var(--w);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--border);cursor:pointer;transition:all 0.15s;}
+.kanban-card:hover{border-color:var(--p400);box-shadow:0 2px 8px rgba(139,92,246,0.1);}
+.kanban-card-title{font-size:12px;font-weight:600;color:var(--text);}
+.kanban-card-client{font-size:11px;color:var(--muted);}
+.kanban-card-meta{display:flex;align-items:center;justify-content:space-between;margin-top:6px;}
+
+/* Person cards */
+.person-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
+.person-card{background:var(--w);border-radius:14px;border:1px solid var(--border);padding:16px;cursor:pointer;transition:all 0.15s;}
+.person-card:hover{border-color:var(--p400);box-shadow:0 4px 16px rgba(139,92,246,0.1);}
+.person-card.selected{border-color:var(--p500);box-shadow:0 0 0 3px var(--p100);}
+.person-header{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+.person-avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;}
+.person-name{font-size:15px;font-weight:600;color:var(--p900);}
+.person-role{font-size:12px;color:var(--muted);}
+.person-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.pstat{background:#faf9ff;border-radius:8px;padding:8px 10px;text-align:center;}
+.pstat-val{font-size:18px;font-weight:700;color:var(--p700);}
+.pstat-label{font-size:10px;color:var(--muted);}
+
+/* Invoice */
+.invoice-card{background:var(--w);border-radius:14px;border:1px solid var(--border);padding:20px;margin-bottom:12px;}
+.invoice-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:8px;}
+.invoice-id{font-size:13px;font-weight:700;color:var(--p800);}
+.invoice-client{font-size:18px;font-weight:700;color:var(--p900);}
+.invoice-amount{font-size:24px;font-weight:700;color:var(--p600);}
+.invoice-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border);}
+.invoice-row:last-child{border-bottom:none;}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--w);border-radius:16px;padding:24px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;}
+.modal-title{font-size:16px;font-weight:700;color:var(--p900);margin-bottom:16px;}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+
+/* Alert rows */
+.alert-row{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+.alert-row:last-child{border-bottom:none;}
+.adot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px;}
+.adot-red{background:var(--danger);}
+.adot-yellow{background:var(--warning);}
+.adot-blue{background:var(--info);}
+.adot-green{background:var(--success);}
+.adot-purple{background:var(--p500);}
+
+/* Tags */
+.tag{display:inline-flex;align-items:center;gap:4px;background:var(--p100);color:var(--p700);border-radius:20px;padding:2px 8px;font-size:11px;font-weight:500;}
+
+/* Notification dot */
+.notif{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--danger);margin-left:6px;vertical-align:middle;}
+
+/* Progress bar */
+.progress-bar{height:6px;background:var(--p100);border-radius:3px;overflow:hidden;margin-top:4px;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--p400),var(--p600));border-radius:3px;transition:width 0.3s;}
+
+.separator{height:1px;background:var(--border);margin:16px 0;}
+.empty-state{text-align:center;padding:32px;color:var(--muted);font-size:13px;}
+
+/* Payment badge */
+.pay-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+.pay-paid{background:#d1fae5;color:#065f46;}
+.pay-partial{background:#fef3c7;color:#92400e;}
+.pay-pending{background:#fee2e2;color:#b91c1c;}
+.pay-advance{background:#dbeafe;color:#1e40af;}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="name">Shanju Media</div>
+    <div class="sub">Ops &amp; Team Hub</div>
+  </div>
+  <div class="sidebar-user">
+    <select class="user-sel" id="current-user" onchange="switchUser()">
+      <option value="Shanju">👑 Shanju (Founder)</option>
+      <option value="Bharath">🎬 Bharath (QC Lead)</option>
+      <option value="Minhaaj">✂️ Minhaaj (Editor)</option>
+      <option value="Gowtham">📸 Gowtham (Videographer)</option>
+      <option value="Bava">📦 Bava (Post Production)</option>
+    </select>
+  </div>
+
+  <div class="nav-section">Overview</div>
+  <div class="nav-item active" onclick="nav('dashboard',this)"><span class="nav-icon">🏠</span> Dashboard</div>
+  <div class="nav-item" onclick="nav('my-tasks',this)"><span class="nav-icon">✅</span> My Tasks</div>
+
+  <div class="nav-section">Work</div>
+  <div class="nav-item" onclick="nav('all-tasks',this)"><span class="nav-icon">📋</span> All Tasks</div>
+  <div class="nav-item" onclick="nav('kanban',this)"><span class="nav-icon">🗂️</span> Kanban Board</div>
+  <div class="nav-item" onclick="nav('team',this)"><span class="nav-icon">👥</span> Team View</div>
+
+  <div class="nav-section">Planning</div>
+  <div class="nav-item" onclick="nav('shoot-cal',this)"><span class="nav-icon">📷</span> Shoot Calendar</div>
+  <div class="nav-item" onclick="nav('post-cal',this)"><span class="nav-icon">📅</span> Post Calendar</div>
+  <div class="nav-item" onclick="nav('pipeline',this)"><span class="nav-icon">🚀</span> Post Pipeline</div>
+
+  <div class="nav-section">Finance</div>
+  <div class="nav-item" onclick="nav('payments',this)" id="nav-payments"><span class="nav-icon">💰</span> Payments<span class="notif" id="pay-notif"></span></div>
+  <div class="nav-item" onclick="nav('invoices',this)"><span class="nav-icon">🧾</span> Invoices</div>
+
+  <div class="sidebar-footer">
+    <div class="ver">Shanju Media v2.0</div>
+  </div>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+<!-- ===== DASHBOARD ===== -->
+<div class="page active" id="page-dashboard">
+  <div class="topbar">
+    <div><div class="page-title" id="dash-title">Founder Dashboard</div><div class="page-sub" id="dash-sub">Full company overview</div></div>
+    <div class="btn-row">
+      <button class="btn btn-primary btn-sm" onclick="openModal('modal-task')">+ Add Task</button>
+    </div>
+  </div>
+  <div class="metric-grid" id="dash-metrics"></div>
+  <div class="row2">
+    <div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">🔥 Immediate Action</span></div>
+        <div class="card-body" id="dash-urgent"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">⚠️ Bottlenecks</span></div>
+        <div class="card-body" id="dash-bottlenecks"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-header"><span class="card-title" id="focus-title">🎯 Founder Focus Today</span></div>
+        <div class="card-body" id="dash-focus"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">📊 Team Workload</span></div>
+        <div class="card-body" id="dash-workload"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MY TASKS ===== -->
+<div class="page" id="page-my-tasks">
+  <div class="topbar">
+    <div><div class="page-title" id="my-tasks-title">My Tasks</div><div class="page-sub">Your personal task list</div></div>
+    <button class="btn btn-primary btn-sm" onclick="openModal('modal-task')">+ Add Task</button>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Active Tasks</span></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Task</th><th>Type</th><th>Deadline</th><th>Status</th><th>Blocker</th><th>Next Step</th><th></th></tr></thead><tbody id="my-task-body"></tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Completed</span></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Task</th><th>Completed</th></tr></thead><tbody id="my-done-body"></tbody></table></div>
+  </div>
+</div>
+
+<!-- ===== ALL TASKS ===== -->
+<div class="page" id="page-all-tasks">
+  <div class="topbar">
+    <div><div class="page-title">All Tasks</div><div class="page-sub">Every task across all clients</div></div>
+    <div class="btn-row">
+      <select id="at-owner" onchange="renderAllTasks()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
+        <option value="">All team</option>
+        <option>Shanju</option><option>Bharath</option><option>Minhaaj</option><option>Gowtham</option><option>Bava</option>
+      </select>
+      <select id="at-status" onchange="renderAllTasks()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
+        <option value="">All status</option>
+        <option>Not started</option><option>In progress</option><option>Waiting for review</option><option>Waiting for input</option><option>Changes needed</option><option>Approved</option><option>Delayed</option><option>Posted</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="openModal('modal-task')">+ Task</button>
+    </div>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Task</th><th>Type</th><th>Owner</th><th>Deadline</th><th>Status</th><th>Priority</th><th>Blocker</th><th>Next Step</th><th></th></tr></thead><tbody id="all-task-body"></tbody></table></div>
+  </div>
+</div>
+
+<!-- ===== KANBAN ===== -->
+<div class="page" id="page-kanban">
+  <div class="topbar">
+    <div><div class="page-title">Kanban Board</div><div class="page-sub">Drag-free visual task flow</div></div>
+    <button class="btn btn-primary btn-sm" onclick="openModal('modal-task')">+ Task</button>
+  </div>
+  <div class="kanban" id="kanban-board"></div>
+</div>
+
+<!-- ===== TEAM ===== -->
+<div class="page" id="page-team">
+  <div class="topbar"><div><div class="page-title">Team View</div><div class="page-sub">See who is doing what</div></div></div>
+  <div class="person-grid" id="person-grid"></div>
+  <div class="card" id="team-detail-card" style="display:none;">
+    <div class="card-header"><span class="card-title" id="team-detail-name"></span></div>
+    <div class="card-body">
+      <div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Task</th><th>Status</th><th>Deadline</th><th>Next Step</th></tr></thead><tbody id="team-detail-body"></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SHOOT CALENDAR ===== -->
+<div class="page" id="page-shoot-cal">
+  <div class="topbar">
+    <div><div class="page-title">📷 Shoot Calendar</div><div class="page-sub">Add and track all shoot days</div></div>
+    <button class="btn btn-primary btn-sm" onclick="openModal('modal-shoot')">+ Add Shoot</button>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="cal-nav">
+        <button class="btn btn-sm" onclick="prevMonth('shoot')">‹</button>
+        <span class="cal-month" id="shoot-cal-title"></span>
+        <button class="btn btn-sm" onclick="nextMonth('shoot')">›</button>
+      </div>
+      <div style="display:flex;gap:8px;font-size:11px;align-items:center;">
+        <span><span class="cal-dot shoot" style="display:inline-block;"></span> Shoot</span>
+        <span><span class="cal-dot meeting" style="display:inline-block;"></span> Meeting</span>
+      </div>
+    </div>
+    <div class="card-body"><div class="cal-grid" id="shoot-cal-grid"></div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Upcoming Shoots</span></div>
+    <div class="card-body"><div id="shoot-list"></div></div>
+  </div>
+</div>
+
+<!-- ===== POST CALENDAR ===== -->
+<div class="page" id="page-post-cal">
+  <div class="topbar">
+    <div><div class="page-title">📅 Post Calendar</div><div class="page-sub">Plan and track all posting days</div></div>
+    <button class="btn btn-primary btn-sm" onclick="openModal('modal-post')">+ Add Post Day</button>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="cal-nav">
+        <button class="btn btn-sm" onclick="prevMonth('post')">‹</button>
+        <span class="cal-month" id="post-cal-title"></span>
+        <button class="btn btn-sm" onclick="nextMonth('post')">›</button>
+      </div>
+      <div style="display:flex;gap:8px;font-size:11px;align-items:center;">
+        <span><span class="cal-dot post" style="display:inline-block;"></span> Post Day</span>
+      </div>
+    </div>
+    <div class="card-body"><div class="cal-grid" id="post-cal-grid"></div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Posting Schedule</span></div>
+    <div class="card-body"><div id="post-list"></div></div>
+  </div>
+</div>
+
+<!-- ===== PIPELINE ===== -->
+<div class="page" id="page-pipeline">
+  <div class="topbar"><div><div class="page-title">🚀 Posting Pipeline</div><div class="page-sub">Track content from idea to posted</div></div>
+  <button class="btn btn-primary btn-sm" onclick="openModal('modal-pipeline')">+ Add Client</button></div>
+  <div class="card" style="padding:0;">
+    <div style="overflow-x:auto;">
+      <table style="min-width:800px;">
+        <thead><tr><th>Client</th><th>Planned</th><th>Shot</th><th>Edit</th><th>QC</th><th>Approved</th><th>Caption</th><th>Scheduled</th><th>Posted</th><th>Gap</th><th></th></tr></thead>
+        <tbody id="pipeline-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAYMENTS ===== -->
+<div class="page" id="page-payments">
+  <div class="topbar">
+    <div><div class="page-title">💰 Payments</div><div class="page-sub">Pending payments, advances, and collections</div></div>
+    <button class="btn btn-primary btn-sm" onclick="openModal('modal-payment')">+ Add Payment</button>
+  </div>
+  <div class="metric-grid" id="pay-metrics"></div>
+  <div class="row2">
+    <div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">🔴 Pending Payments</span></div>
+        <div class="card-body" id="pay-pending-list"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">🔵 Advances Paid</span></div>
+        <div class="card-body" id="pay-advance-list"></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">All Payments</span></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Amount</th><th>Type</th><th>Status</th><th>Due Date</th><th>Notes</th><th></th></tr></thead><tbody id="pay-body"></tbody></table></div>
+  </div>
+</div>
+
+<!-- ===== INVOICES ===== -->
+<div class="page" id="page-invoices">
+  <div class="topbar">
+    <div><div class="page-title">🧾 Invoices</div><div class="page-sub">Save and manage all client invoices</div></div>
+    <button class="btn btn-primary btn-sm" onclick="openModal('modal-invoice')">+ New Invoice</button>
+  </div>
+  <div id="invoice-list"></div>
+</div>
+
+</div><!-- end content -->
+</div><!-- end shell -->
+
+<!-- ===== MODALS ===== -->
+
+<!-- Task Modal -->
+<div class="modal-overlay" id="modal-task">
+  <div class="modal">
+    <div class="modal-title">➕ Add / Edit Task</div>
+    <div class="form-grid">
+      <div class="fg"><label>Client</label><input id="t-client" placeholder="e.g. Ramraj"></div>
+      <div class="fg"><label>Task Name</label><input id="t-name" placeholder="e.g. Reel 2 Edit"></div>
+      <div class="fg"><label>Type</label><select id="t-type"><option>Editing</option><option>QC Review</option><option>Script writing</option><option>Shoot planning</option><option>Shoot execution</option><option>Caption writing</option><option>Uploading</option><option>Client approval</option><option>Revision</option><option>Posting</option><option>Content strategy</option></select></div>
+      <div class="fg"><label>Owner</label><select id="t-owner"><option>Minhaaj</option><option>Bharath</option><option>Gowtham</option><option>Bava</option><option>Shanju</option></select></div>
+      <div class="fg"><label>Deadline</label><input type="date" id="t-deadline"></div>
+      <div class="fg"><label>Status</label><select id="t-status"><option>Not started</option><option>In progress</option><option>Waiting for review</option><option>Waiting for input</option><option>Changes needed</option><option>Approved</option><option>Delayed</option><option>Posted</option></select></div>
+      <div class="fg"><label>Priority</label><select id="t-priority"><option>High</option><option>Medium</option><option>Low</option></select></div>
+      <div class="fg"><label>Blocker</label><input id="t-blocker" placeholder="None"></div>
+    </div>
+    <div class="fg"><label>Next Step</label><input id="t-next" placeholder="e.g. Send to Bharath for QC"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-task')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTask()">Save Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shoot Modal -->
+<div class="modal-overlay" id="modal-shoot">
+  <div class="modal">
+    <div class="modal-title">📷 Add Shoot Day</div>
+    <div class="form-grid">
+      <div class="fg"><label>Client</label><input id="sh-client" placeholder="e.g. Vivaash"></div>
+      <div class="fg"><label>Date</label><input type="date" id="sh-date"></div>
+      <div class="fg"><label>Type</label><select id="sh-type"><option value="shoot">Shoot Day</option><option value="meeting">Meeting</option></select></div>
+      <div class="fg"><label>Assigned To</label><select id="sh-owner"><option>Gowtham</option><option>Shanju</option><option>Bharath</option><option>Minhaaj</option><option>Bava</option></select></div>
+    </div>
+    <div class="fg"><label>Notes</label><textarea id="sh-notes" placeholder="Location, brief, special requirements..."></textarea></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-shoot')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveShoot()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Post Modal -->
+<div class="modal-overlay" id="modal-post">
+  <div class="modal">
+    <div class="modal-title">📅 Add Post Day</div>
+    <div class="form-grid">
+      <div class="fg"><label>Client</label><input id="po-client" placeholder="e.g. Ramraj"></div>
+      <div class="fg"><label>Date</label><input type="date" id="po-date"></div>
+      <div class="fg"><label>Platform</label><select id="po-platform"><option>Instagram</option><option>YouTube</option><option>Facebook</option><option>LinkedIn</option><option>Multiple</option></select></div>
+      <div class="fg"><label>Content Type</label><select id="po-ctype"><option>Storytelling Reel</option><option>Founder Talk</option><option>Product Reel</option><option>Offer Reel</option><option>Trend</option><option>Customer Story</option><option>Educational</option><option>Brand Recall</option></select></div>
+    </div>
+    <div class="fg"><label>Caption Status</label><select id="po-cap"><option>Pending</option><option>Draft Ready</option><option>Approved</option></select></div>
+    <div class="fg"><label>Notes</label><textarea id="po-notes" placeholder="Hashtags, timing, special instructions..."></textarea></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-post')">Cancel</button>
+      <button class="btn btn-primary" onclick="savePost()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pipeline Modal -->
+<div class="modal-overlay" id="modal-pipeline">
+  <div class="modal">
+    <div class="modal-title">🚀 Add Pipeline Client</div>
+    <div class="form-grid">
+      <div class="fg"><label>Client</label><input id="pl-client" placeholder="e.g. Ramraj"></div>
+      <div class="fg"><label>Posts Planned This Week</label><input type="number" id="pl-planned" value="2" min="1"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="pl-shot"> Shot</label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="pl-edit"> Edit</label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="pl-qc"> QC</label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="pl-approved"> Approved</label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="pl-caption"> Caption</label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="pl-scheduled"> Scheduled</label>
+    </div>
+    <div class="fg"><label>Posts Already Posted</label><input type="number" id="pl-posted" value="0" min="0"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-pipeline')">Cancel</button>
+      <button class="btn btn-primary" onclick="savePipeline()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Payment Modal -->
+<div class="modal-overlay" id="modal-payment">
+  <div class="modal">
+    <div class="modal-title">💰 Add Payment Record</div>
+    <div class="form-grid">
+      <div class="fg"><label>Client</label><input id="pay-client" placeholder="e.g. Ramraj"></div>
+      <div class="fg"><label>Amount (₹)</label><input type="number" id="pay-amount" placeholder="50000"></div>
+      <div class="fg"><label>Type</label><select id="pay-type"><option>Full Payment</option><option>Advance</option><option>Partial</option><option>Balance Due</option></select></div>
+      <div class="fg"><label>Status</label><select id="pay-status"><option>Pending</option><option>Paid</option><option>Advance Received</option><option>Partially Paid</option></select></div>
+      <div class="fg"><label>Due Date</label><input type="date" id="pay-due"></div>
+      <div class="fg"><label>Project</label><input id="pay-project" placeholder="e.g. Monthly retainer"></div>
+    </div>
+    <div class="fg"><label>Notes</label><textarea id="pay-notes" placeholder="UPI, bank transfer, cheque..."></textarea></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-payment')">Cancel</button>
+      <button class="btn btn-primary" onclick="savePayment()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Invoice Modal -->
+<div class="modal-overlay" id="modal-invoice">
+  <div class="modal">
+    <div class="modal-title">🧾 New Invoice</div>
+    <div class="form-grid">
+      <div class="fg"><label>Client Name</label><input id="inv-client" placeholder="e.g. Ramraj Silks"></div>
+      <div class="fg"><label>Invoice #</label><input id="inv-num" placeholder="e.g. INV-001"></div>
+      <div class="fg"><label>Total Amount (₹)</label><input type="number" id="inv-total" placeholder="75000"></div>
+      <div class="fg"><label>Advance Paid (₹)</label><input type="number" id="inv-advance" placeholder="0" value="0"></div>
+      <div class="fg"><label>Invoice Date</label><input type="date" id="inv-date"></div>
+      <div class="fg"><label>Due Date</label><input type="date" id="inv-due"></div>
+    </div>
+    <div class="fg"><label>Services</label><textarea id="inv-services" placeholder="e.g. 4 Reels - Content Strategy, Shoot, Edit, Posting"></textarea></div>
+    <div class="fg"><label>Status</label><select id="inv-status"><option>Unpaid</option><option>Partially Paid</option><option>Paid</option></select></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-invoice')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveInvoice()">Save Invoice</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+function daysDiff(d){const t=new Date(d);t.setHours(0,0,0,0);return Math.round((t-TODAY)/(86400000));}
+function fmt(d){if(!d)return '—';const dt=new Date(d);return dt.toLocaleDateString('en-IN',{day:'numeric',month:'short'});}
+function fmtMoney(n){return '₹'+Number(n).toLocaleString('en-IN');}
+
+// ===== DATA =====
+let tasks=[
+  {id:1,client:'Ramraj',name:'Reel 2 Edit',type:'Editing',owner:'Minhaaj',deadline:'2026-04-10',status:'In progress',priority:'High',blocker:'None',next:'Finish first cut and send to Bharath',done:false},
+  {id:2,client:'Oxford',name:'Reel 1 QC',type:'QC Review',owner:'Bharath',deadline:'2026-04-08',status:'Waiting for review',priority:'High',blocker:'None',next:'Review and approve',done:false},
+  {id:3,client:'SPV',name:'Caption Writing',type:'Caption writing',owner:'Bava',deadline:'2026-04-07',status:'Not started',priority:'High',blocker:'Caption missing',next:'Draft caption and send for approval',done:false},
+  {id:4,client:'Vivaash',name:'Brand Shoot',type:'Shoot execution',owner:'Gowtham',deadline:'2026-04-09',status:'In progress',priority:'High',blocker:'None',next:'Complete shoot and organize footage',done:false},
+  {id:5,client:'Shas',name:'Founder Reel Direction',type:'Content strategy',owner:'Shanju',deadline:'2026-04-11',status:'Waiting for input',priority:'High',blocker:'Founder approval pending',next:'Shanju to finalize storytelling direction',done:false},
+  {id:6,client:'Ramraj',name:'Client Correction',type:'Revision',owner:'Minhaaj',deadline:'2026-04-09',status:'Not started',priority:'Medium',blocker:'None',next:'Apply correction and re-send',done:false},
+  {id:7,client:'Oxford',name:'Upload Reel',type:'Uploading',owner:'Bava',deadline:'2026-04-09',status:'Not started',priority:'Medium',blocker:'QC pending',next:'Wait for Bharath QC then upload',done:false},
+  {id:8,client:'Ramraj',name:'Reel 1 Posting',type:'Posting',owner:'Bava',deadline:'2026-04-06',status:'Approved',priority:'High',blocker:'None',next:'Schedule and post',done:false},
+];
+let nextTaskId=9;
+
+let shoots=[
+  {id:1,client:'Vivaash',date:'2026-04-09',type:'shoot',owner:'Gowtham',notes:'Studio shoot – 4 looks'},
+  {id:2,client:'Ramraj',date:'2026-04-12',type:'shoot',owner:'Gowtham',notes:'Outdoor reel – market location'},
+  {id:3,client:'Shas',date:'2026-04-15',type:'meeting',owner:'Shanju',notes:'Creative direction meeting'},
+];
+let nextShootId=4;
+
+let posts=[
+  {id:1,client:'Ramraj',date:'2026-04-07',platform:'Instagram',ctype:'Storytelling Reel',cap:'Approved',notes:'Post at 7PM'},
+  {id:2,client:'Oxford',date:'2026-04-10',platform:'Instagram',ctype:'Founder Talk',cap:'Draft Ready',notes:''},
+  {id:3,client:'SPV',date:'2026-04-11',platform:'Instagram',ctype:'Product Reel',cap:'Pending',notes:'Wait for caption'},
+];
+let nextPostId=4;
+
+let pipeline=[
+  {client:'Ramraj',planned:3,shot:true,edit:false,qc:false,approved:false,caption:false,scheduled:false,posted:1},
+  {client:'Oxford',planned:2,shot:true,edit:true,qc:false,approved:false,caption:false,scheduled:false,posted:0},
+  {client:'SPV',planned:2,shot:true,edit:true,qc:true,approved:true,caption:false,scheduled:false,posted:0},
+  {client:'Vivaash',planned:2,shot:false,edit:false,qc:false,approved:false,caption:false,scheduled:false,posted:0},
+  {client:'Shas',planned:1,shot:false,edit:false,qc:false,approved:false,caption:false,scheduled:false,posted:0},
+];
+let nextPLId=6;
+
+let payments=[
+  {id:1,client:'Ramraj',amount:75000,type:'Full Payment',status:'Partially Paid',due:'2026-04-15',project:'Monthly retainer',notes:'Balance ₹25,000 pending'},
+  {id:2,client:'Oxford',amount:50000,type:'Advance',status:'Advance Received',due:'2026-04-01',project:'3-month package',notes:'₹25,000 advance received'},
+  {id:3,client:'SPV',amount:40000,type:'Full Payment',status:'Pending',due:'2026-04-10',project:'Campaign reels',notes:'Invoice sent, awaiting payment'},
+  {id:4,client:'Vivaash',amount:30000,type:'Advance',status:'Paid',due:'2026-03-28',project:'Brand shoot + edit',notes:'Full advance paid'},
+  {id:5,client:'Shas',amount:60000,type:'Balance Due',status:'Pending',due:'2026-04-20',project:'Founder series',notes:'₹30,000 advance pending'},
+];
+let nextPayId=6;
+
+let invoices=[
+  {id:1,client:'Ramraj Silks',num:'INV-001',total:75000,advance:50000,date:'2026-03-01',due:'2026-04-01',services:'4 Reels – Strategy, Shoot, Edit, Post',status:'Partially Paid'},
+  {id:2,client:'Oxford Academy',num:'INV-002',total:50000,advance:25000,date:'2026-03-15',due:'2026-04-15',services:'3 Reels + 1 Founder Talk',status:'Partially Paid'},
+];
+let nextInvId=3;
+
+let currentUser='Shanju';
+let shootCalMonth=new Date(TODAY.getFullYear(),TODAY.getMonth(),1);
+let postCalMonth=new Date(TODAY.getFullYear(),TODAY.getMonth(),1);
+
+const AVATARS={Shanju:'av-S',Bharath:'av-B',Minhaaj:'av-M',Gowtham:'av-G',Bava:'av-V'};
+const INITS={Shanju:'SJ',Bharath:'BH',Minhaaj:'MH',Gowtham:'GW',Bava:'BV'};
+const ROLES={Shanju:'Founder & CEO',Bharath:'Chief Editor / QC',Minhaaj:'Editor',Gowtham:'Videographer & Editor',Bava:'Post Production Head'};
+const EMOJIS={Shanju:'👑',Bharath:'🎬',Minhaaj:'✂️',Gowtham:'📸',Bava:'📦'};
+const PAL={Shanju:'#f5f3ff',Bharath:'#dbeafe',Minhaaj:'#d1fae5',Gowtham:'#fef3c7',Bava:'#fce7f3'};
+const PALTEXT={Shanju:'#6d28d9',Bharath:'#1e40af',Minhaaj:'#065f46',Gowtham:'#92400e',Bava:'#9d174d'};
+
+function avBadge(n){return `<span style="display:inline-flex;align-items:center;gap:5px;"><span class="avatar ${AVATARS[n]||'av-S'}" style="background:${PAL[n]};color:${PALTEXT[n]};">${INITS[n]||n[0]}</span>${n}</span>`;}
+
+function statusPill(s){
+  const m={'In progress':'pill-info','Not started':'pill-neutral','Waiting for review':'pill-warning','Waiting for input':'pill-warning','Changes needed':'pill-warning','Approved':'pill-success','Delayed':'pill-danger','Posted':'pill-success','Scheduled':'pill-success'};
+  return `<span class="pill ${m[s]||'pill-neutral'}">${s}</span>`;
+}
+function priPill(p){const m={High:'pill-danger',Medium:'pill-warning',Low:'pill-success'};return `<span class="pill ${m[p]||'pill-neutral'}">${p}</span>`;}
+function ddPill(d){const diff=daysDiff(d);if(!d)return '—';if(diff<0)return `<span class="pill pill-danger">Overdue ${Math.abs(diff)}d</span>`;if(diff===0)return `<span class="pill pill-warning">Today</span>`;if(diff===1)return `<span class="pill pill-warning">Tomorrow</span>`;return `<span style="font-size:12px;color:var(--muted);">${fmt(d)}</span>`;}
+
+// NAV
+function nav(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(el)el.classList.add('active');
+  renderPage(id);
+}
+
+function renderPage(id){
+  if(id==='dashboard')renderDash();
+  if(id==='my-tasks')renderMyTasks();
+  if(id==='all-tasks')renderAllTasks();
+  if(id==='kanban')renderKanban();
+  if(id==='team')renderTeam();
+  if(id==='shoot-cal')renderShootCal();
+  if(id==='post-cal')renderPostCal();
+  if(id==='pipeline')renderPipeline();
+  if(id==='payments')renderPayments();
+  if(id==='invoices')renderInvoices();
+}
+
+function switchUser(){
+  currentUser=document.getElementById('current-user').value;
+  const page=document.querySelector('.page.active');
+  if(page)renderPage(page.id.replace('page-',''));
+  renderDashHeader();
+}
+
+function renderDashHeader(){
+  document.getElementById('dash-title').textContent=currentUser==='Shanju'?'Founder Dashboard':`${currentUser}'s Dashboard`;
+  document.getElementById('dash-sub').textContent=currentUser==='Shanju'?'Full company overview':'Your personal workspace';
+  document.getElementById('focus-title').textContent=currentUser==='Shanju'?'🎯 Founder Focus Today':'🎯 My Focus Today';
+}
+
+// ===== DASHBOARD =====
+function renderDash(){
+  renderDashHeader();
+  const myTasks=currentUser==='Shanju'?tasks:tasks.filter(t=>t.owner===currentUser);
+  const active=myTasks.filter(t=>!t.done&&t.status!=='Posted');
+  const overdue=active.filter(t=>daysDiff(t.deadline)<0);
+  const dueToday=active.filter(t=>daysDiff(t.deadline)===0);
+  const review=active.filter(t=>t.status==='Waiting for review');
+
+  let metrics='';
+  if(currentUser==='Shanju'){
+    const allActive=tasks.filter(t=>!t.done&&t.status!=='Posted');
+    const pendingPay=payments.filter(p=>p.status==='Pending');
+    metrics=`
+      <div class="mcard purple"><div class="mcard-label">Active Tasks</div><div class="mcard-val">${allActive.length}</div><div class="mcard-sub">Across all clients</div></div>
+      <div class="mcard danger"><div class="mcard-label">Overdue</div><div class="mcard-val">${allActive.filter(t=>daysDiff(t.deadline)<0).length}</div><div class="mcard-sub">Need attention</div></div>
+      <div class="mcard warning"><div class="mcard-label">Due Today</div><div class="mcard-val">${allActive.filter(t=>daysDiff(t.deadline)===0).length}</div></div>
+      <div class="mcard info"><div class="mcard-label">Awaiting Review</div><div class="mcard-val">${allActive.filter(t=>t.status==='Waiting for review').length}</div></div>
+      <div class="mcard danger"><div class="mcard-label">Pending Payments</div><div class="mcard-val">${pendingPay.length}</div><div class="mcard-sub">${fmtMoney(pendingPay.reduce((s,p)=>s+Number(p.amount),0))}</div></div>
+      <div class="mcard success"><div class="mcard-label">Active Clients</div><div class="mcard-val">${[...new Set(tasks.map(t=>t.client))].length}</div></div>`;
+  } else {
+    metrics=`
+      <div class="mcard purple"><div class="mcard-label">My Tasks</div><div class="mcard-val">${active.length}</div></div>
+      <div class="mcard danger"><div class="mcard-label">Overdue</div><div class="mcard-val">${overdue.length}</div></div>
+      <div class="mcard warning"><div class="mcard-label">Due Today</div><div class="mcard-val">${dueToday.length}</div></div>
+      <div class="mcard info"><div class="mcard-label">In Review</div><div class="mcard-val">${review.length}</div></div>`;
+  }
+  document.getElementById('dash-metrics').innerHTML=metrics;
+
+  // Urgent
+  const urgentSrc=currentUser==='Shanju'?tasks:myTasks;
+  const urgent=urgentSrc.filter(t=>!t.done&&daysDiff(t.deadline)<=1&&t.status!=='Posted').slice(0,5);
+  document.getElementById('dash-urgent').innerHTML=urgent.length?urgent.map(t=>{
+    const d=daysDiff(t.deadline);
+    const dot=d<0?'adot-red':d===0?'adot-yellow':'adot-blue';
+    return `<div class="alert-row"><div class="adot ${dot}"></div><div><div style="font-size:13px;font-weight:600;">${t.client} — ${t.name}</div><div style="font-size:12px;color:var(--muted);">Owner: ${t.owner} · ${t.status}</div><div style="font-size:12px;color:#7c3aed;margin-top:2px;">→ ${t.next}</div></div></div>`;
+  }).join(''):`<div class="empty-state">No urgent items 🎉</div>`;
+
+  // Bottlenecks
+  const bn=[];
+  const bQC=tasks.filter(t=>t.owner==='Bharath'&&t.status==='Waiting for review'&&!t.done);
+  if(bQC.length)bn.push({dot:'adot-red',text:`Bharath QC backlog — ${bQC.length} tasks waiting. Delivery is blocked.`});
+  const bBava=tasks.filter(t=>t.owner==='Bava'&&t.status==='Not started'&&!t.done);
+  if(bBava.length)bn.push({dot:'adot-yellow',text:`Bava has ${bBava.length} unstarted tasks — content may be stuck before posting.`});
+  const noOwner=tasks.filter(t=>!t.owner&&!t.done);
+  if(noOwner.length)bn.push({dot:'adot-red',text:`${noOwner.length} tasks have no assigned owner.`});
+  if(!bn.length)bn.push({dot:'adot-green',text:'No major bottlenecks detected. Operations are running smoothly.'});
+  document.getElementById('dash-bottlenecks').innerHTML=bn.map(b=>`<div class="alert-row"><div class="adot ${b.dot}"></div><div style="font-size:13px;">${b.text}</div></div>`).join('');
+
+  // Focus
+  const focus=currentUser==='Shanju'?[
+    'Approve storytelling direction for Shas — blocking all downstream work.',
+    'Review Oxford reel after Bharath QC — then it is ready to post.',
+    'Chase SPV pending payment — due this week.',
+  ]:[
+    ...active.filter(t=>t.priority==='High').slice(0,3).map(t=>`Complete: ${t.client} — ${t.name} (${t.status})`),
+  ];
+  document.getElementById('dash-focus').innerHTML=focus.map(f=>`<div class="alert-row"><div class="adot adot-purple"></div><div style="font-size:13px;">${f}</div></div>`).join('')||`<div class="empty-state">Nothing specific today — check tasks.</div>`;
+
+  // Workload (founder only)
+  if(currentUser==='Shanju'){
+    const members=['Shanju','Bharath','Minhaaj','Gowtham','Bava'];
+    document.getElementById('dash-workload').innerHTML=members.map(m=>{
+      const mt=tasks.filter(t=>t.owner===m&&!t.done&&t.status!=='Posted');
+      const ov=mt.filter(t=>daysDiff(t.deadline)<0).length;
+      const pct=Math.min(100,mt.length*20);
+      return `<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span>${avBadge(m)}</span><span style="color:var(--muted);">${mt.length} tasks${ov?` · <span style="color:var(--danger);">${ov} overdue</span>`:''}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>`;
+    }).join('');
+  } else {
+    document.getElementById('dash-workload').innerHTML=`<div style="font-size:13px;color:var(--muted);">Switch to Shanju view to see full team workload.</div>`;
+  }
+}
+
+// ===== MY TASKS =====
+function renderMyTasks(){
+  document.getElementById('my-tasks-title').textContent=`${currentUser}'s Tasks`;
+  const mine=tasks.filter(t=>t.owner===currentUser&&!t.done&&t.status!=='Posted');
+  const done=tasks.filter(t=>t.owner===currentUser&&(t.done||t.status==='Posted'));
+  document.getElementById('my-task-body').innerHTML=mine.length?mine.map(t=>`<tr>
+    <td style="font-weight:600;">${t.client}</td><td>${t.name}</td><td><span style="font-size:11px;color:var(--muted);">${t.type}</span></td>
+    <td>${ddPill(t.deadline)}</td><td>${statusPill(t.status)}</td>
+    <td style="font-size:11px;color:${t.blocker&&t.blocker!=='None'?'var(--warning)':'var(--muted)'};">${t.blocker||'—'}</td>
+    <td style="font-size:11px;color:var(--muted);">${t.next}</td>
+    <td><button class="btn btn-sm" onclick="markDone(${t.id})">✓ Done</button></td>
+  </tr>`).join(''):`<tr><td colspan="8" class="empty-state">No active tasks.</td></tr>`;
+  document.getElementById('my-done-body').innerHTML=done.length?done.map(t=>`<tr><td>${t.client}</td><td>${t.name}</td><td><span class="pill pill-success">Done</span></td></tr>`).join(''):`<tr><td colspan="3" class="empty-state">No completed tasks yet.</td></tr>`;
+}
+
+function markDone(id){const t=tasks.find(t=>t.id===id);if(t){t.done=true;t.status='Posted';}renderMyTasks();renderDash();}
+
+// ===== ALL TASKS =====
+function renderAllTasks(){
+  const of=document.getElementById('at-owner').value;
+  const sf=document.getElementById('at-status').value;
+  const filtered=tasks.filter(t=>(!of||t.owner===of)&&(!sf||t.status===sf));
+  document.getElementById('all-task-body').innerHTML=filtered.map(t=>`<tr>
+    <td style="font-weight:600;">${t.client}</td><td>${t.name}</td>
+    <td><span style="font-size:11px;color:var(--muted);">${t.type}</span></td>
+    <td>${avBadge(t.owner)}</td><td>${ddPill(t.deadline)}</td>
+    <td>${statusPill(t.status)}</td><td>${priPill(t.priority)}</td>
+    <td style="font-size:11px;color:${t.blocker&&t.blocker!=='None'?'var(--warning)':'var(--muted)'};">${t.blocker||'—'}</td>
+    <td style="font-size:11px;color:var(--muted);">${t.next}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="deleteTask(${t.id})">✕</button></td>
+  </tr>`).join('')||`<tr><td colspan="10" class="empty-state">No tasks match filters.</td></tr>`;
+}
+
+function deleteTask(id){tasks=tasks.filter(t=>t.id!==id);renderAllTasks();}
+
+// ===== KANBAN =====
+function renderKanban(){
+  const cols=['Not started','In progress','Waiting for review','Changes needed','Approved','Posted'];
+  document.getElementById('kanban-board').innerHTML=cols.map(col=>{
+    const cards=tasks.filter(t=>t.status===col);
+    return `<div class="kanban-col">
+      <div class="kanban-col-title">${col}<span class="kanban-count">${cards.length}</span></div>
+      ${cards.map(t=>`<div class="kanban-card">
+        <div class="kanban-card-title">${t.name}</div>
+        <div class="kanban-card-client">${t.client}</div>
+        <div class="kanban-card-meta">${avBadge(t.owner)}${priPill(t.priority)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">${fmt(t.deadline)}</div>
+      </div>`).join('')||'<div style="font-size:11px;color:var(--muted);text-align:center;padding:12px 0;">Empty</div>'}
+    </div>`;
+  }).join('');
+}
+
+// ===== TEAM =====
+function renderTeam(){
+  const members=['Shanju','Bharath','Minhaaj','Gowtham','Bava'];
+  document.getElementById('person-grid').innerHTML=members.map(m=>{
+    const mt=tasks.filter(t=>t.owner===m&&!t.done);
+    const ov=mt.filter(t=>daysDiff(t.deadline)<0).length;
+    const done=tasks.filter(t=>t.owner===m&&t.done).length;
+    return `<div class="person-card" onclick="showTeamDetail('${m}')">
+      <div class="person-header">
+        <div class="person-avatar" style="background:${PAL[m]};color:${PALTEXT[m]};font-size:18px;">${EMOJIS[m]}</div>
+        <div><div class="person-name">${m}</div><div class="person-role">${ROLES[m]}</div></div>
+      </div>
+      <div class="person-stats">
+        <div class="pstat"><div class="pstat-val">${mt.length}</div><div class="pstat-label">Active</div></div>
+        <div class="pstat"><div class="pstat-val" style="${ov?'color:var(--danger)':''}">${ov}</div><div class="pstat-label">Overdue</div></div>
+        <div class="pstat"><div class="pstat-val" style="color:var(--success);">${done}</div><div class="pstat-label">Done</div></div>
+        <div class="pstat"><div class="pstat-val">${mt.filter(t=>t.priority==='High').length}</div><div class="pstat-label">High Pri</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showTeamDetail(m){
+  const card=document.getElementById('team-detail-card');
+  card.style.display='block';
+  document.getElementById('team-detail-name').textContent=`${EMOJIS[m]} ${m} — All Tasks`;
+  const mt=tasks.filter(t=>t.owner===m);
+  document.getElementById('team-detail-body').innerHTML=mt.map(t=>`<tr>
+    <td style="font-weight:600;">${t.client}</td><td>${t.name}</td>
+    <td>${statusPill(t.status)}</td><td>${ddPill(t.deadline)}</td>
+    <td style="font-size:11px;color:var(--muted);">${t.next}</td>
+  </tr>`).join('')||`<tr><td colspan="5" class="empty-state">No tasks.</td></tr>`;
+  card.scrollIntoView({behavior:'smooth'});
+}
+
+// ===== CALENDAR HELPERS =====
+function buildCal(calType,month,events,dotKey){
+  const yr=month.getFullYear(),mo=month.getMonth();
+  const title=month.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  document.getElementById(calType+'-cal-title').textContent=title;
+  const firstDay=new Date(yr,mo,1).getDay();
+  const daysInMonth=new Date(yr,mo+1,0).getDate();
+  const dows=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html=dows.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  for(let i=0;i<firstDay;i++)html+=`<div class="cal-day empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=`${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dayEvents=events.filter(e=>e.date===dateStr);
+    const isToday=new Date(dateStr).toDateString()===TODAY.toDateString();
+    const dots=dayEvents.map(e=>`<span class="cal-dot ${e[dotKey]||dotKey}"></span>`).join('');
+    const labels=dayEvents.map(e=>`<div class="cal-events">${e.client}</div>`).join('');
+    html+=`<div class="cal-day${isToday?' today':''}"><div class="cal-day-num">${d}</div><div class="cal-dots">${dots}</div>${labels}</div>`;
+  }
+  document.getElementById(calType+'-cal-grid').innerHTML=html;
+}
+
+function renderShootCal(){
+  buildCal('shoot',shootCalMonth,shoots,'type');
+  const upcoming=shoots.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  document.getElementById('shoot-list').innerHTML=upcoming.map(s=>`
+    <div class="alert-row">
+      <div class="adot ${s.type==='shoot'?'adot-purple':'adot-blue'}"></div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;">${s.client} — ${s.type==='shoot'?'Shoot Day':'Meeting'}</div>
+        <div style="font-size:12px;color:var(--muted);">${fmt(s.date)} · ${s.owner} · ${s.notes}</div>
+      </div>
+      <button class="btn btn-sm btn-danger" onclick="deleteShoot(${s.id})">✕</button>
+    </div>`).join('')||'<div class="empty-state">No shoots scheduled.</div>';
+}
+
+function prevMonth(t){if(t==='shoot'){shootCalMonth=new Date(shootCalMonth.getFullYear(),shootCalMonth.getMonth()-1,1);renderShootCal();}else{postCalMonth=new Date(postCalMonth.getFullYear(),postCalMonth.getMonth()-1,1);renderPostCal();}}
+function nextMonth(t){if(t==='shoot'){shootCalMonth=new Date(shootCalMonth.getFullYear(),shootCalMonth.getMonth()+1,1);renderShootCal();}else{postCalMonth=new Date(postCalMonth.getFullYear(),postCalMonth.getMonth()+1,1);renderPostCal();}}
+
+function renderPostCal(){
+  buildCal('post',postCalMonth,posts,'post');
+  const sorted=posts.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  document.getElementById('post-list').innerHTML=sorted.map(p=>`
+    <div class="alert-row">
+      <div class="adot adot-green"></div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;">${p.client} — ${p.ctype}</div>
+        <div style="font-size:12px;color:var(--muted);">${fmt(p.date)} · ${p.platform} · Caption: <span style="color:${p.cap==='Approved'?'var(--success)':p.cap==='Pending'?'var(--danger)':'var(--warning)'};">${p.cap}</span></div>
+      </div>
+      <button class="btn btn-sm btn-danger" onclick="deletePost(${p.id})">✕</button>
+    </div>`).join('')||'<div class="empty-state">No posts scheduled.</div>';
+}
+
+function deleteShoot(id){shoots=shoots.filter(s=>s.id!==id);renderShootCal();}
+function deletePost(id){posts=posts.filter(p=>p.id!==id);renderPostCal();}
+
+// ===== PIPELINE =====
+function renderPipeline(){
+  const ck='<span style="color:var(--success);font-size:15px;">✓</span>';
+  const cr='<span style="color:#d1d5db;font-size:15px;">✗</span>';
+  document.getElementById('pipeline-body').innerHTML=pipeline.map((p,i)=>{
+    const gaps=[];
+    if(!p.shot)gaps.push('Shoot');else if(!p.edit)gaps.push('Edit');else if(!p.qc)gaps.push('QC');else if(!p.approved)gaps.push('Approval');else if(!p.caption)gaps.push('Caption');else if(!p.scheduled)gaps.push('Schedule');
+    const gap=gaps.length?`<span class="pill pill-danger">${gaps[0]}</span>`:`<span class="pill pill-success">Ready</span>`;
+    return `<tr>
+      <td style="font-weight:700;">${p.client}</td>
+      <td>${p.planned}</td>
+      <td><input type="checkbox" ${p.shot?'checked':''} onchange="togglePL(${i},'shot',this.checked)"></td>
+      <td><input type="checkbox" ${p.edit?'checked':''} onchange="togglePL(${i},'edit',this.checked)"></td>
+      <td><input type="checkbox" ${p.qc?'checked':''} onchange="togglePL(${i},'qc',this.checked)"></td>
+      <td><input type="checkbox" ${p.approved?'checked':''} onchange="togglePL(${i},'approved',this.checked)"></td>
+      <td><input type="checkbox" ${p.caption?'checked':''} onchange="togglePL(${i},'caption',this.checked)"></td>
+      <td><input type="checkbox" ${p.scheduled?'checked':''} onchange="togglePL(${i},'scheduled',this.checked)"></td>
+      <td>${p.posted}</td>
+      <td>${gap}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="deletePL(${i})">✕</button></td>
+    </tr>`;
+  }).join('')||`<tr><td colspan="11" class="empty-state">No clients in pipeline.</td></tr>`;
+}
+
+function togglePL(i,key,val){pipeline[i][key]=val;renderPipeline();}
+function deletePL(i){pipeline.splice(i,1);renderPipeline();}
+
+// ===== PAYMENTS =====
+function renderPayments(){
+  const pending=payments.filter(p=>p.status==='Pending'||p.status==='Partially Paid');
+  const advances=payments.filter(p=>p.status==='Advance Received');
+  const totalPending=pending.reduce((s,p)=>s+Number(p.amount),0);
+  const totalCollected=payments.filter(p=>p.status==='Paid').reduce((s,p)=>s+Number(p.amount),0);
+
+  document.getElementById('pay-metrics').innerHTML=`
+    <div class="mcard danger"><div class="mcard-label">Pending Amount</div><div class="mcard-val">${fmtMoney(totalPending)}</div><div class="mcard-sub">${pending.length} clients</div></div>
+    <div class="mcard info"><div class="mcard-label">Advances Received</div><div class="mcard-val">${advances.length}</div><div class="mcard-sub">${fmtMoney(advances.reduce((s,p)=>s+Number(p.amount),0))}</div></div>
+    <div class="mcard success"><div class="mcard-label">Total Collected</div><div class="mcard-val">${fmtMoney(totalCollected)}</div></div>
+    <div class="mcard purple"><div class="mcard-label">Total Invoiced</div><div class="mcard-val">${fmtMoney(payments.reduce((s,p)=>s+Number(p.amount),0))}</div></div>`;
+
+  const payStatusBadge=s=>{const m={'Paid':'pay-paid','Partially Paid':'pay-partial','Pending':'pay-pending','Advance Received':'pay-advance'};return `<span class="pay-badge ${m[s]||'pay-pending'}">${s}</span>`;};
+
+  document.getElementById('pay-pending-list').innerHTML=pending.length?pending.map(p=>`
+    <div class="alert-row">
+      <div class="adot adot-red"></div>
+      <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${p.client}</div>
+      <div style="font-size:12px;color:var(--muted);">${p.project} · Due ${fmt(p.due)}</div>
+      <div style="font-size:12px;margin-top:2px;">${fmtMoney(p.amount)} · ${payStatusBadge(p.status)}</div></div>
+    </div>`).join(''):'<div class="empty-state">No pending payments 🎉</div>';
+
+  document.getElementById('pay-advance-list').innerHTML=advances.length?advances.map(p=>`
+    <div class="alert-row">
+      <div class="adot adot-blue"></div>
+      <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${p.client}</div>
+      <div style="font-size:12px;color:var(--muted);">${p.project}</div>
+      <div style="font-size:12px;margin-top:2px;">${fmtMoney(p.amount)} advance received</div></div>
+    </div>`).join(''):'<div class="empty-state">No advance records.</div>';
+
+  document.getElementById('pay-body').innerHTML=payments.map(p=>`<tr>
+    <td style="font-weight:600;">${p.client}</td>
+    <td style="font-weight:700;color:var(--p700);">${fmtMoney(p.amount)}</td>
+    <td><span style="font-size:11px;color:var(--muted);">${p.type}</span></td>
+    <td>${payStatusBadge(p.status)}</td>
+    <td>${fmt(p.due)}</td>
+    <td style="font-size:12px;color:var(--muted);">${p.notes}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="deletePayment(${p.id})">✕</button></td>
+  </tr>`).join('');
+
+  // notif dot
+  document.getElementById('pay-notif').style.display=pending.length?'inline-block':'none';
+}
+
+function deletePayment(id){payments=payments.filter(p=>p.id!==id);renderPayments();}
+
+// ===== INVOICES =====
+function renderInvoices(){
+  document.getElementById('invoice-list').innerHTML=invoices.length?invoices.map(inv=>{
+    const balance=inv.total-inv.advance;
+    const statusColor={Paid:'var(--success)',Unpaid:'var(--danger)','Partially Paid':'var(--warning)'};
+    return `<div class="invoice-card">
+      <div class="invoice-top">
+        <div>
+          <div class="invoice-id">${inv.num}</div>
+          <div class="invoice-client">${inv.client}</div>
+          <div style="font-size:12px;color:var(--muted);">Issued: ${fmt(inv.date)} · Due: ${fmt(inv.due)}</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="invoice-amount">${fmtMoney(inv.total)}</div>
+          <div style="margin-top:4px;"><span class="pill" style="background:${statusColor[inv.status]}22;color:${statusColor[inv.status]};">${inv.status}</span></div>
+        </div>
+      </div>
+      <div class="invoice-row"><span style="color:var(--muted);">Services</span><span style="font-size:12px;">${inv.services}</span></div>
+      <div class="invoice-row"><span style="color:var(--muted);">Total</span><span style="font-weight:700;">${fmtMoney(inv.total)}</span></div>
+      <div class="invoice-row"><span style="color:var(--muted);">Advance Paid</span><span style="color:var(--success);font-weight:600;">${fmtMoney(inv.advance)}</span></div>
+      <div class="invoice-row"><span style="color:var(--muted);">Balance Due</span><span style="color:${balance>0?'var(--danger)':'var(--success)'};font-weight:700;">${fmtMoney(balance)}</span></div>
+      <div style="margin-top:12px;display:flex;gap:8px;">
+        <button class="btn btn-sm" onclick="markInvPaid(${inv.id})">✓ Mark Paid</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteInv(${inv.id})">Delete</button>
+      </div>
+    </div>`;
+  }).join(''):'<div class="empty-state" style="padding:40px;">No invoices saved yet. Click + New Invoice to add one.</div>';
+}
+
+function markInvPaid(id){const inv=invoices.find(i=>i.id===id);if(inv){inv.status='Paid';inv.advance=inv.total;}renderInvoices();}
+function deleteInv(id){invoices=invoices.filter(i=>i.id!==id);renderInvoices();}
+
+// ===== MODALS =====
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+
+function saveTask(){
+  const client=document.getElementById('t-client').value.trim();
+  const name=document.getElementById('t-name').value.trim();
+  if(!client||!name){alert('Client and task name required.');return;}
+  tasks.push({id:nextTaskId++,client,name,type:document.getElementById('t-type').value,owner:document.getElementById('t-owner').value,deadline:document.getElementById('t-deadline').value,status:document.getElementById('t-status').value,priority:document.getElementById('t-priority').value,blocker:document.getElementById('t-blocker').value||'None',next:document.getElementById('t-next').value,done:false});
+  closeModal('modal-task');
+  ['t-client','t-name','t-blocker','t-next','t-deadline'].forEach(i=>document.getElementById(i).value='');
+  const page=document.querySelector('.page.active');
+  if(page)renderPage(page.id.replace('page-',''));
+}
+
+function saveShoot(){
+  const client=document.getElementById('sh-client').value.trim();
+  const date=document.getElementById('sh-date').value;
+  if(!client||!date){alert('Client and date required.');return;}
+  shoots.push({id:nextShootId++,client,date,type:document.getElementById('sh-type').value,owner:document.getElementById('sh-owner').value,notes:document.getElementById('sh-notes').value});
+  closeModal('modal-shoot');
+  renderShootCal();
+}
+
+function savePost(){
+  const client=document.getElementById('po-client').value.trim();
+  const date=document.getElementById('po-date').value;
+  if(!client||!date){alert('Client and date required.');return;}
+  posts.push({id:nextPostId++,client,date,platform:document.getElementById('po-platform').value,ctype:document.getElementById('po-ctype').value,cap:document.getElementById('po-cap').value,notes:document.getElementById('po-notes').value});
+  closeModal('modal-post');
+  renderPostCal();
+}
+
+function savePipeline(){
+  const client=document.getElementById('pl-client').value.trim();
+  if(!client){alert('Client name required.');return;}
+  pipeline.push({client,planned:parseInt(document.getElementById('pl-planned').value)||2,shot:document.getElementById('pl-shot').checked,edit:document.getElementById('pl-edit').checked,qc:document.getElementById('pl-qc').checked,approved:document.getElementById('pl-approved').checked,caption:document.getElementById('pl-caption').checked,scheduled:document.getElementById('pl-scheduled').checked,posted:parseInt(document.getElementById('pl-posted').value)||0});
+  closeModal('modal-pipeline');
+  renderPipeline();
+}
+
+function savePayment(){
+  const client=document.getElementById('pay-client').value.trim();
+  const amount=document.getElementById('pay-amount').value;
+  if(!client||!amount){alert('Client and amount required.');return;}
+  payments.push({id:nextPayId++,client,amount,type:document.getElementById('pay-type').value,status:document.getElementById('pay-status').value,due:document.getElementById('pay-due').value,project:document.getElementById('pay-project').value,notes:document.getElementById('pay-notes').value});
+  closeModal('modal-payment');
+  renderPayments();
+}
+
+function saveInvoice(){
+  const client=document.getElementById('inv-client').value.trim();
+  const total=document.getElementById('inv-total').value;
+  if(!client||!total){alert('Client and total required.');return;}
+  invoices.push({id:nextInvId++,client,num:document.getElementById('inv-num').value||`INV-00${nextInvId}`,total:Number(total),advance:Number(document.getElementById('inv-advance').value)||0,date:document.getElementById('inv-date').value,due:document.getElementById('inv-due').value,services:document.getElementById('inv-services').value,status:document.getElementById('inv-status').value});
+  closeModal('modal-invoice');
+  renderInvoices();
+}
+
+// ===== INIT =====
+const d=new Date();
+document.getElementById('t-deadline').value=d.toISOString().split('T')[0];
+document.getElementById('sh-date').value=d.toISOString().split('T')[0];
+document.getElementById('po-date').value=d.toISOString().split('T')[0];
+document.getElementById('pay-due').value=d.toISOString().split('T')[0];
+document.getElementById('inv-date').value=d.toISOString().split('T')[0];
+document.getElementById('inv-due').value=d.toISOString().split('T')[0];
+renderDash();
+// Show pending payment notification
+renderPayments();
+setTimeout(()=>{const p=payments.filter(x=>x.status==='Pending'||x.status==='Partially Paid');document.getElementById('pay-notif').style.display=p.length?'inline-block':'none';},100);
+</script>
+</body>
+</html>
