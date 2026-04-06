@@ -210,7 +210,7 @@ async function dbDelete(table, id) {
 function nav(id, el) {
   const role = currentProfile?.role;
   // Finance + founder pages: owner only
-  if ((id === 'payments' || id === 'invoices' || id === 'client-followup' || id === 'performance') && role !== 'owner') {
+  if ((id === 'payments' || id === 'invoices' || id === 'client-followup' || id === 'performance' || id === 'founder-panel') && role !== 'owner') {
     toast('Access restricted — visible to Owner only.');
     return;
   }
@@ -244,6 +244,7 @@ function renderPage(id) {
   else if (id === 'daily-update')    renderDailyUpdate();
   else if (id === 'team-daily')      renderTeamDaily();
   else if (id === 'performance')     renderPerformance();
+  else if (id === 'founder-panel')   renderFounderPanel();
 }
 
 function switchUser() {
@@ -1846,7 +1847,342 @@ async function deleteReview(id) {
 }
 
 
-// ---- 17. PERFORMANCE TRACKING (owner only) ----
+// ---- 17. FOUNDER COMMAND PANEL ----
+
+// localStorage helpers
+const FP = {
+  today:    () => new Date().toISOString().split('T')[0],
+  monthKey: () => new Date().toISOString().slice(0,7),
+  uid:      () => Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+  get:      k  => JSON.parse(localStorage.getItem('fp_'+k) || '[]'),
+  set:      (k,v) => localStorage.setItem('fp_'+k, JSON.stringify(v)),
+  getObj:   k  => JSON.parse(localStorage.getItem('fp_'+k) || 'null'),
+  setObj:   (k,v) => localStorage.setItem('fp_'+k, JSON.stringify(v)),
+};
+
+function renderFounderPanel() {
+  const today     = FP.today();
+  const monthKey  = FP.monthKey();
+  const dateLabel = new Date(today+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const el = document.getElementById('fp-date-sub');
+  if (el) el.textContent = dateLabel;
+
+  // ── Auto carry-forward: yesterday's unfinished daily todos
+  const yest = new Date(Date.now()-86400000).toISOString().split('T')[0];
+  const yesterTodos = FP.get('daily_'+yest).filter(t => t.status !== 'done');
+  const existCarry  = FP.get('carry');
+  yesterTodos.forEach(t => {
+    if (!existCarry.find(c => c.ref === t.id)) {
+      existCarry.push({ id: FP.uid(), text: t.text, from: yest, done: false, ref: t.id });
+    }
+  });
+  FP.set('carry', existCarry);
+
+  document.getElementById('fp-body').innerHTML =
+    fpCalls() + fpMessages() + fpDailyTodo() + fpCarryForward() + fpMonthlyTodo() + fpGoals() + fpDeals();
+}
+
+// ── CALLS ──────────────────────────────────────────
+function fpCalls() {
+  const calls = FP.get('calls_' + FP.today());
+  const rows = calls.map((c,i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
+      <button onclick="fpCallToggle(${i})" style="flex-shrink:0;width:24px;height:24px;border-radius:50%;border:2px solid ${c.done?'var(--success)':'var(--border)'};background:${c.done?'var(--success)':'transparent'};color:white;font-size:11px;cursor:pointer;">${c.done?'✓':''}</button>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;${c.done?'text-decoration:line-through;color:var(--muted);':''}">${c.name}</div>
+        ${c.note?`<div style="font-size:11px;color:var(--muted);">${c.note}</div>`:''}
+      </div>
+      <button onclick="fpCallDel(${i})" style="color:var(--muted);background:none;border:none;cursor:pointer;font-size:16px;padding:0 4px;">×</button>
+    </div>`).join('');
+  return `<div class="card" style="margin-bottom:14px;">
+    <div class="card-header"><span class="card-title">📞 Calls Today</span><span class="pill pill-neutral">${calls.filter(c=>c.done).length}/${calls.length}</span></div>
+    <div class="card-body" style="padding-bottom:10px;">
+      ${rows||'<div class="empty-state" style="padding:8px 0;">No calls added yet.</div>'}
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+        <input id="fp-call-name" placeholder="Person / Company" style="flex:1;min-width:100px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);font-size:13px;">
+        <input id="fp-call-note" placeholder="What to discuss (optional)" style="flex:2;min-width:140px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);font-size:13px;">
+        <button class="btn btn-primary btn-sm" onclick="fpCallAdd()">+ Add</button>
+      </div>
+    </div>
+  </div>`;
+}
+function fpCallAdd() {
+  const name = document.getElementById('fp-call-name')?.value.trim();
+  if (!name) return;
+  const calls = FP.get('calls_'+FP.today());
+  calls.push({ id: FP.uid(), name, note: document.getElementById('fp-call-note')?.value.trim()||'', done: false });
+  FP.set('calls_'+FP.today(), calls);
+  renderFounderPanel();
+}
+function fpCallToggle(i) { const k='calls_'+FP.today(); const a=FP.get(k); a[i].done=!a[i].done; FP.set(k,a); renderFounderPanel(); }
+function fpCallDel(i)    { const k='calls_'+FP.today(); const a=FP.get(k); a.splice(i,1); FP.set(k,a); renderFounderPanel(); }
+
+// ── MESSAGES ───────────────────────────────────────
+function fpMessages() {
+  const msgs = FP.get('msgs_' + FP.today());
+  const rows = msgs.map((m,i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
+      <button onclick="fpMsgToggle(${i})" style="flex-shrink:0;width:24px;height:24px;border-radius:50%;border:2px solid ${m.done?'var(--success)':'var(--border)'};background:${m.done?'var(--success)':'transparent'};color:white;font-size:11px;cursor:pointer;">${m.done?'✓':''}</button>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;${m.done?'text-decoration:line-through;color:var(--muted);':''}">${m.person}</div>
+        ${m.note?`<div style="font-size:11px;color:var(--muted);">${m.note}</div>`:''}
+      </div>
+      <button onclick="fpMsgDel(${i})" style="color:var(--muted);background:none;border:none;cursor:pointer;font-size:16px;padding:0 4px;">×</button>
+    </div>`).join('');
+  return `<div class="card" style="margin-bottom:14px;">
+    <div class="card-header"><span class="card-title">💬 Messages / Follow-Ups</span><span class="pill pill-neutral">${msgs.filter(m=>m.done).length}/${msgs.length}</span></div>
+    <div class="card-body" style="padding-bottom:10px;">
+      ${rows||'<div class="empty-state" style="padding:8px 0;">No messages added yet.</div>'}
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+        <input id="fp-msg-person" placeholder="Person / Platform" style="flex:1;min-width:100px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);font-size:13px;">
+        <input id="fp-msg-note" placeholder="What to send / follow up on" style="flex:2;min-width:140px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);font-size:13px;">
+        <button class="btn btn-primary btn-sm" onclick="fpMsgAdd()">+ Add</button>
+      </div>
+    </div>
+  </div>`;
+}
+function fpMsgAdd() {
+  const person = document.getElementById('fp-msg-person')?.value.trim();
+  if (!person) return;
+  const msgs = FP.get('msgs_'+FP.today());
+  msgs.push({ id: FP.uid(), person, note: document.getElementById('fp-msg-note')?.value.trim()||'', done: false });
+  FP.set('msgs_'+FP.today(), msgs);
+  renderFounderPanel();
+}
+function fpMsgToggle(i) { const k='msgs_'+FP.today(); const a=FP.get(k); a[i].done=!a[i].done; FP.set(k,a); renderFounderPanel(); }
+function fpMsgDel(i)    { const k='msgs_'+FP.today(); const a=FP.get(k); a.splice(i,1); FP.set(k,a); renderFounderPanel(); }
+
+// ── DAILY TO-DO ────────────────────────────────────
+function fpDailyTodo() {
+  const todos = FP.get('daily_'+FP.today());
+  const statusIcon = s => s==='done'?'✅':s==='skip'?'⏭':'⏳';
+  const statusColor = s => s==='done'?'var(--success)':s==='skip'?'var(--muted)':'var(--warning)';
+  const rows = todos.map((t,i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:16px;cursor:pointer;" onclick="fpTodoCycle(${i})" title="Click to change status">${statusIcon(t.status)}</span>
+      <div style="flex:1;font-size:13px;${t.status==='done'?'text-decoration:line-through;color:var(--muted);':t.status==='skip'?'color:var(--muted);':''}">${t.text}</div>
+      <span style="font-size:10px;font-weight:700;color:${statusColor(t.status)};">${t.status||'todo'}</span>
+      <button onclick="fpTodoDel(${i})" style="color:var(--muted);background:none;border:none;cursor:pointer;font-size:16px;padding:0 4px;">×</button>
+    </div>`).join('');
+  const done = todos.filter(t=>t.status==='done').length;
+  return `<div class="card" style="margin-bottom:14px;">
+    <div class="card-header"><span class="card-title">✅ Daily To-Do</span><span class="pill ${done===todos.length&&todos.length?'pill-success':'pill-neutral'}">${done}/${todos.length} done</span></div>
+    <div class="card-body" style="padding-bottom:10px;">
+      ${rows||'<div class="empty-state" style="padding:8px 0;">Add your tasks for today.</div>'}
+      <div style="display:flex;gap:6px;margin-top:10px;">
+        <input id="fp-todo-text" placeholder="Task for today..." style="flex:1;padding:7px 10px;border-radius:7px;border:1px solid var(--border);font-size:13px;"
+          onkeydown="if(event.key==='Enter') fpTodoAdd()">
+        <button class="btn btn-primary btn-sm" onclick="fpTodoAdd()">+ Add</button>
+      </div>
+    </div>
+  </div>`;
+}
+function fpTodoAdd() {
+  const text = document.getElementById('fp-todo-text')?.value.trim();
+  if (!text) return;
+  const todos = FP.get('daily_'+FP.today());
+  todos.push({ id: FP.uid(), text, status: 'todo' });
+  FP.set('daily_'+FP.today(), todos);
+  renderFounderPanel();
+}
+function fpTodoCycle(i) {
+  const k='daily_'+FP.today(); const a=FP.get(k);
+  const cycle = {todo:'done', done:'skip', skip:'todo'};
+  a[i].status = cycle[a[i].status||'todo'];
+  FP.set(k,a); renderFounderPanel();
+}
+function fpTodoDel(i) { const k='daily_'+FP.today(); const a=FP.get(k); a.splice(i,1); FP.set(k,a); renderFounderPanel(); }
+
+// ── CARRY FORWARD ──────────────────────────────────
+function fpCarryForward() {
+  const items = FP.get('carry');
+  const rows = items.map((c,i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
+      <button onclick="fpCarryToggle(${i})" style="flex-shrink:0;width:24px;height:24px;border-radius:50%;border:2px solid ${c.done?'var(--success)':'var(--warning)'};background:${c.done?'var(--success)':'transparent'};color:white;font-size:11px;cursor:pointer;">${c.done?'✓':''}</button>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;${c.done?'text-decoration:line-through;color:var(--muted);':''}">${c.text}</div>
+        <div style="font-size:10px;color:var(--muted);">From ${c.from||'previous day'}</div>
+      </div>
+      <button onclick="fpCarryTodo(${i})" class="btn btn-sm" style="font-size:11px;" title="Move to today's to-do">→ Today</button>
+      <button onclick="fpCarryDel(${i})" style="color:var(--muted);background:none;border:none;cursor:pointer;font-size:16px;padding:0 4px;">×</button>
+    </div>`).join('');
+  return `<div class="card" style="margin-bottom:14px;${items.filter(c=>!c.done).length?'border-left:3px solid var(--warning);':''}">
+    <div class="card-header"><span class="card-title">🔁 Carry Forward</span><span class="pill pill-warning">${items.filter(c=>!c.done).length} pending</span></div>
+    <div class="card-body" style="padding-bottom:10px;">
+      ${rows||'<div class="empty-state" style="padding:8px 0;">No carry-forward tasks. Good job! 🎉</div>'}
+      <div style="display:flex;gap:6px;margin-top:10px;">
+        <input id="fp-carry-text" placeholder="Add manually..." style="flex:1;padding:7px 10px;border-radius:7px;border:1px solid var(--border);font-size:13px;"
+          onkeydown="if(event.key==='Enter') fpCarryAdd()">
+        <button class="btn btn-sm" onclick="fpCarryAdd()">+ Add</button>
+      </div>
+    </div>
+  </div>`;
+}
+function fpCarryAdd() {
+  const text = document.getElementById('fp-carry-text')?.value.trim();
+  if (!text) return;
+  const items = FP.get('carry');
+  items.push({ id: FP.uid(), text, from: 'manual', done: false, ref: null });
+  FP.set('carry', items); renderFounderPanel();
+}
+function fpCarryToggle(i) { const a=FP.get('carry'); a[i].done=!a[i].done; FP.set('carry',a); renderFounderPanel(); }
+function fpCarryDel(i)    { const a=FP.get('carry'); a.splice(i,1); FP.set('carry',a); renderFounderPanel(); }
+function fpCarryTodo(i) {
+  const items = FP.get('carry');
+  const todos  = FP.get('daily_'+FP.today());
+  todos.push({ id: FP.uid(), text: items[i].text, status: 'todo' });
+  items.splice(i,1);
+  FP.set('carry', items); FP.set('daily_'+FP.today(), todos);
+  renderFounderPanel();
+}
+
+// ── MONTHLY TO-DO ──────────────────────────────────
+function fpMonthlyTodo() {
+  const mk    = FP.monthKey();
+  const todos = FP.get('mtodo_'+mk);
+  const rows  = todos.map((t,i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
+      <button onclick="fpMTodoToggle(${i})" style="flex-shrink:0;width:24px;height:24px;border-radius:50%;border:2px solid ${t.done?'var(--success)':'var(--border)'};background:${t.done?'var(--success)':'transparent'};color:white;font-size:11px;cursor:pointer;">${t.done?'✓':''}</button>
+      <div style="flex:1;font-size:13px;${t.done?'text-decoration:line-through;color:var(--muted);':''}">${t.text}</div>
+      <button onclick="fpMTodoDel(${i})" style="color:var(--muted);background:none;border:none;cursor:pointer;font-size:16px;padding:0 4px;">×</button>
+    </div>`).join('');
+  const done = todos.filter(t=>t.done).length;
+  const pct  = todos.length ? Math.round(done/todos.length*100) : 0;
+  return `<div class="card" style="margin-bottom:14px;">
+    <div class="card-header">
+      <span class="card-title">📅 Monthly To-Do</span>
+      <span style="font-size:12px;color:var(--muted);">${done}/${todos.length} · ${pct}%</span>
+    </div>
+    <div class="card-body" style="padding-bottom:10px;">
+      ${todos.length?`<div style="height:5px;background:var(--border);border-radius:3px;margin-bottom:12px;"><div style="width:${pct}%;height:5px;background:var(--success);border-radius:3px;"></div></div>`:''}
+      ${rows||'<div class="empty-state" style="padding:8px 0;">Add strategic tasks for this month.</div>'}
+      <div style="display:flex;gap:6px;margin-top:10px;">
+        <input id="fp-mtodo-text" placeholder="Strategic task for this month..." style="flex:1;padding:7px 10px;border-radius:7px;border:1px solid var(--border);font-size:13px;"
+          onkeydown="if(event.key==='Enter') fpMTodoAdd()">
+        <button class="btn btn-primary btn-sm" onclick="fpMTodoAdd()">+ Add</button>
+      </div>
+    </div>
+  </div>`;
+}
+function fpMTodoAdd() {
+  const text = document.getElementById('fp-mtodo-text')?.value.trim();
+  if (!text) return;
+  const k = 'mtodo_'+FP.monthKey();
+  const todos = FP.get(k);
+  todos.push({ id: FP.uid(), text, done: false });
+  FP.set(k, todos); renderFounderPanel();
+}
+function fpMTodoToggle(i) { const k='mtodo_'+FP.monthKey(); const a=FP.get(k); a[i].done=!a[i].done; FP.set(k,a); renderFounderPanel(); }
+function fpMTodoDel(i)    { const k='mtodo_'+FP.monthKey(); const a=FP.get(k); a.splice(i,1); FP.set(k,a); renderFounderPanel(); }
+
+// ── MONTHLY GOALS ──────────────────────────────────
+function fpGoals() {
+  const mk = FP.monthKey();
+  const g  = FP.getObj('goals_'+mk) || { revenue_t:0, revenue_a:0, clients_t:0, clients_a:0, content_t:0, content_a:0 };
+  const monthLabel = new Date(mk+'-01').toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+
+  function goalRow(label, icon, tKey, aKey) {
+    const t = g[tKey]||0, a = g[aKey]||0;
+    const pct = t ? Math.min(100, Math.round(a/t*100)) : 0;
+    const col = pct>=100?'var(--success)':pct>=60?'var(--warning)':'var(--danger)';
+    return `<div style="margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:13px;font-weight:600;">${icon} ${label}</span>
+        <span style="font-size:12px;color:${col};font-weight:700;">${a} / ${t||'—'} ${pct?'('+pct+'%)':''}</span>
+      </div>
+      <div style="height:7px;background:var(--border);border-radius:4px;margin-bottom:6px;">
+        <div style="width:${pct}%;height:7px;background:${col};border-radius:4px;"></div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <div style="flex:1;"><label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;">Target</label>
+          <input type="number" value="${t}" onchange="fpGoalSet('${tKey}',this.value)"
+            style="width:100%;padding:5px 8px;border-radius:6px;border:1px solid var(--border);font-size:13px;margin-top:2px;"></div>
+        <div style="flex:1;"><label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;">Actual</label>
+          <input type="number" value="${a}" onchange="fpGoalSet('${aKey}',this.value)"
+            style="width:100%;padding:5px 8px;border-radius:6px;border:1px solid var(--border);font-size:13px;margin-top:2px;"></div>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="card" style="margin-bottom:14px;">
+    <div class="card-header"><span class="card-title">🎯 Monthly Goals</span><span style="font-size:12px;color:var(--muted);">${monthLabel}</span></div>
+    <div class="card-body">
+      ${goalRow('Revenue (₹)', '💰', 'revenue_t', 'revenue_a')}
+      ${goalRow('Clients', '🤝', 'clients_t', 'clients_a')}
+      ${goalRow('Content Pieces', '🎬', 'content_t', 'content_a')}
+    </div>
+  </div>`;
+}
+function fpGoalSet(key, val) {
+  const mk = FP.monthKey();
+  const g  = FP.getObj('goals_'+mk) || {};
+  g[key] = Number(val)||0;
+  FP.setObj('goals_'+mk, g);
+  // No full re-render to avoid losing focus — just update progress bars
+  renderFounderPanel();
+}
+
+// ── EXPECTED BUSINESS (DEALS) ──────────────────────
+const FP_STAGES = ['Prospect','Contacted','Proposal Sent','Negotiation','Closed Won','Closed Lost'];
+function fpDeals() {
+  const deals = FP.get('deals');
+  const stageColor = s => s==='Closed Won'?'var(--success)':s==='Closed Lost'?'var(--danger)':s==='Negotiation'?'var(--warning)':'var(--p700)';
+  const totalPotential = deals.filter(d=>d.stage!=='Closed Lost').reduce((s,d)=>s+Number(d.value||0),0);
+  const totalWon       = deals.filter(d=>d.stage==='Closed Won').reduce((s,d)=>s+Number(d.value||0),0);
+
+  const rows = deals.map((d,i) => `
+    <tr>
+      <td style="font-weight:600;font-size:13px;">${d.name}</td>
+      <td style="font-size:13px;">₹${Number(d.value||0).toLocaleString('en-IN')}</td>
+      <td>
+        <select onchange="fpDealStage(${i},this.value)" style="font-size:11px;padding:3px 6px;border-radius:5px;border:1px solid var(--border);color:${stageColor(d.stage)};">
+          ${FP_STAGES.map(s=>`<option value="${s}" ${s===d.stage?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td style="font-size:11px;color:var(--muted);max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.notes||'—'}</td>
+      <td><button onclick="fpDealDel(${i})" style="color:var(--muted);background:none;border:none;cursor:pointer;font-size:16px;">×</button></td>
+    </tr>`).join('');
+
+  return `<div class="card" style="margin-bottom:14px;">
+    <div class="card-header">
+      <span class="card-title">💼 Expected Business</span>
+      <span style="font-size:12px;color:var(--muted);">Won: <strong style="color:var(--success);">₹${totalWon.toLocaleString('en-IN')}</strong> &nbsp;|&nbsp; Pipeline: <strong>₹${totalPotential.toLocaleString('en-IN')}</strong></span>
+    </div>
+    <div class="card-body" style="padding:0;">
+      ${deals.length ? `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border);">
+          <th style="text-align:left;padding:8px 14px;font-size:11px;color:var(--muted);">Client / Deal</th>
+          <th style="text-align:left;padding:8px 14px;font-size:11px;color:var(--muted);">Value</th>
+          <th style="text-align:left;padding:8px 14px;font-size:11px;color:var(--muted);">Stage</th>
+          <th style="text-align:left;padding:8px 14px;font-size:11px;color:var(--muted);">Notes</th>
+          <th style="padding:8px 14px;"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>` : '<div class="empty-state" style="padding:16px;">No deals yet. Add your first prospect.</div>'}
+      <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;">
+        <input id="fp-deal-name"  placeholder="Client / Deal name" style="flex:2;min-width:120px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);font-size:13px;">
+        <input id="fp-deal-value" placeholder="₹ Value" type="number" style="flex:1;min-width:80px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);font-size:13px;">
+        <select id="fp-deal-stage" style="flex:1;min-width:110px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);font-size:13px;">
+          ${FP_STAGES.map(s=>`<option>${s}</option>`).join('')}
+        </select>
+        <input id="fp-deal-notes" placeholder="Notes (optional)" style="flex:2;min-width:120px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);font-size:13px;">
+        <button class="btn btn-primary btn-sm" onclick="fpDealAdd()">+ Add</button>
+      </div>
+    </div>
+  </div>`;
+}
+function fpDealAdd() {
+  const name = document.getElementById('fp-deal-name')?.value.trim();
+  if (!name) return;
+  const deals = FP.get('deals');
+  deals.push({ id: FP.uid(), name, value: document.getElementById('fp-deal-value')?.value||0, stage: document.getElementById('fp-deal-stage')?.value||'Prospect', notes: document.getElementById('fp-deal-notes')?.value.trim()||'' });
+  FP.set('deals', deals); renderFounderPanel();
+}
+function fpDealStage(i, stage) { const a=FP.get('deals'); a[i].stage=stage; FP.set('deals',a); renderFounderPanel(); }
+function fpDealDel(i)          { const a=FP.get('deals'); a.splice(i,1); FP.set('deals',a); renderFounderPanel(); }
+
+
+// ---- 18. PERFORMANCE TRACKING (owner only) ----
 
 // Scoring: each reel = 30pts total (15 sent for caption + 15 exported)
 // Max 3 reels = 90pts + 10pts daily update = 100 max

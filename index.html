@@ -125,6 +125,7 @@
     <div class="nav-item" data-section="planning" onclick="nav('pipeline',this)"> <span class="nav-icon">🚀</span> Post Pipeline</div>
 
     <div class="nav-section" data-section="founder">Founder</div>
+    <div class="nav-item" data-section="founder" onclick="nav('founder-panel',this)"><span class="nav-icon">⚡</span> Command Panel</div>
     <div class="nav-item" data-section="founder" onclick="nav('client-followup',this)"><span class="nav-icon">🤝</span> Client Follow-Up</div>
     <div class="nav-item" data-section="founder" onclick="nav('performance',this)"><span class="nav-icon">🏆</span> Performance</div>
 
@@ -570,6 +571,19 @@
           </table>
         </div>
       </div>
+    </div>
+
+    <!-- =====================================================
+         FOUNDER COMMAND PANEL (founder only)
+         ===================================================== -->
+    <div class="page" id="page-founder-panel">
+      <div class="topbar">
+        <div>
+          <div class="page-title">⚡ Command Panel</div>
+          <div class="page-sub" id="fp-date-sub"></div>
+        </div>
+      </div>
+      <div id="fp-body" style="max-width:720px;"></div>
     </div>
 
     <!-- =====================================================
