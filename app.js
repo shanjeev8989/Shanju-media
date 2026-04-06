@@ -886,6 +886,7 @@ async function updateTaskStatus(id, status) {
   tasks = tasks.map(t => t.id === id ? { ...t, status, status_updated_at: now } : t);
   const activePage = document.querySelector('.page.active')?.id.replace('page-', '');
   if (activePage === 'all-tasks') renderAllTasks();
+  else if (activePage === 'team') renderTeam();
   else renderMyTasks();
   renderDash();
 }
@@ -896,7 +897,9 @@ async function updatePostStatus(id, status) {
   posts = posts.map(p => p.id === id ? { ...p, caption_status: status, status_updated_at: now } : p);
   const activePage = document.querySelector('.page.active')?.id.replace('page-', '');
   if (activePage === 'all-tasks') renderAllTasks();
+  else if (activePage === 'team') renderTeam();
   else renderMyTasks();
+  renderDash();
 }
 
 async function markDone(id) {
@@ -1039,9 +1042,10 @@ function renderTeam() {
   const todayStr = now.toISOString().split('T')[0];
   const monthLabel = now.toLocaleDateString('en-IN', { month: 'long' });
 
-  const teamMonthExp = tasks.filter(t => t.status === 'Exported' && t.status_updated_at?.startsWith(monthPfx)).length
-    + posts.filter(p => p.caption_status === 'Exported' && p.status_updated_at?.startsWith(monthPfx)).length;
-  const teamMonthCap = tasks.filter(t => (t.status === 'Sent for Caption' || t.status === 'Exported') && t.status_updated_at?.startsWith(monthPfx)).length;
+  const expDate = t => (t.status_updated_at || t.created_at || '');
+  const teamMonthExp = tasks.filter(t => t.status === 'Exported' && expDate(t).startsWith(monthPfx)).length
+    + posts.filter(p => p.caption_status === 'Exported' && expDate(p).startsWith(monthPfx)).length;
+  const teamMonthCap = tasks.filter(t => (t.status === 'Sent for Caption' || t.status === 'Exported') && expDate(t).startsWith(monthPfx)).length;
 
   document.getElementById('team-monthly-summary').innerHTML = `
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:stretch;">
@@ -1052,9 +1056,9 @@ function renderTeam() {
       </div>
       ${members.map(m => {
         const mLow = m.trim().toLowerCase();
-        const exp  = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Exported' && t.status_updated_at?.startsWith(monthPfx)).length
-                   + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Exported' && p.status_updated_at?.startsWith(monthPfx)).length;
-        const cap  = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && (t.status === 'Sent for Caption' || t.status === 'Exported') && t.status_updated_at?.startsWith(monthPfx)).length;
+        const exp  = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Exported' && expDate(t).startsWith(monthPfx)).length
+                   + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Exported' && expDate(p).startsWith(monthPfx)).length;
+        const cap  = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && (t.status === 'Sent for Caption' || t.status === 'Exported') && expDate(t).startsWith(monthPfx)).length;
         return `<div class="mcard info" style="min-width:130px;">
           <div class="mcard-label">${memberEmoji(m)} ${m}</div>
           <div class="mcard-val">${exp}</div>
@@ -1078,10 +1082,10 @@ function renderTeam() {
           <tbody>
             ${members.map(m => {
               const mLow     = m.trim().toLowerCase();
-              const expToday = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Exported' && t.status_updated_at?.startsWith(todayStr)).length
-                             + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Exported' && p.status_updated_at?.startsWith(todayStr)).length;
-              const capToday = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Sent for Caption' && t.status_updated_at?.startsWith(todayStr)).length
-                             + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Sent for Caption' && p.status_updated_at?.startsWith(todayStr)).length;
+              const expToday = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Exported' && expDate(t).startsWith(todayStr)).length
+                             + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Exported' && expDate(p).startsWith(todayStr)).length;
+              const capToday = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Sent for Caption' && expDate(t).startsWith(todayStr)).length
+                             + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Sent for Caption' && expDate(p).startsWith(todayStr)).length;
               const active   = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status !== 'Exported' && !t.done).length
                              + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && captionToStatus(p.caption_status) !== 'Exported').length;
               return `<tr style="border-top:1px solid var(--border);">
