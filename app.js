@@ -117,13 +117,14 @@ async function loadAll(silent = false) {
     } catch (e3) {
       dailyUpdates = [];
     }
-    populateEditorDropdown();
-    populateTeamDropdowns();
-
-    await loadPendingUsers();
+    // Only rebuild dropdowns and check pending users on full loads (not silent background refreshes)
+    if (!silent) {
+      populateEditorDropdown();
+      populateTeamDropdowns();
+      await loadPendingUsers();
+    }
 
     setSynced();
-    // silent=true when called from realtime — don't re-render, just update data
     if (!silent) {
       renderPage(document.querySelector('.page.active')?.id.replace('page-', ''));
       updatePayNotif();
@@ -1484,6 +1485,11 @@ async function saveTask() {
   const client = document.getElementById('t-client').value.trim();
   const name   = document.getElementById('t-name').value.trim();
   if (!client || !name) { toast('Client and task name required.'); return; }
+
+  // Immediate feedback — disable button to prevent double-clicks
+  const btn = document.querySelector('#modal-task .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
   const row = {
     client, name,
     type:      document.getElementById('t-type').value,
@@ -1496,6 +1502,9 @@ async function saveTask() {
     done: false,
   };
   const saved = await dbInsert('tasks', row);
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Save Task'; }
+
   if (saved) {
     tasks.unshift(saved);
 
@@ -1509,13 +1518,14 @@ async function saveTask() {
         planned_date:   row.deadline || null,
         task_id:        saved.id,
       };
-      const plSaved = await dbInsert('pipeline', plRow, true); // silent = no extra toast
+      const plSaved = await dbInsert('pipeline', plRow, true);
       if (plSaved) { pipeline.push(plSaved); toast('Task saved & added to pipeline!'); }
     }
 
     closeModal('modal-task');
     ['t-client','t-name','t-blocker','t-next','t-deadline'].forEach(i => document.getElementById(i).value = '');
-    renderPage(document.querySelector('.page.active')?.id.replace('page-', ''));
+    // Use setTimeout to let modal close animation finish before re-rendering
+    setTimeout(() => renderPage(document.querySelector('.page.active')?.id.replace('page-', '')), 50);
   }
 }
 
@@ -1537,6 +1547,8 @@ async function savePost() {
   const client = document.getElementById('po-client').value.trim();
   const date   = document.getElementById('po-date').value;
   if (!client || !date) { toast('Client and date required.'); return; }
+  const btn = document.querySelector('#modal-post .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   const row = {
     client, date,
     platform:         document.getElementById('po-platform').value,
@@ -1546,6 +1558,7 @@ async function savePost() {
     notes:            document.getElementById('po-notes').value,
   };
   const saved = await dbInsert('posts', row);
+  if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
   if (saved) { posts.push(saved); closeModal('modal-post'); renderPostCal(); }
 }
 
@@ -1612,12 +1625,12 @@ function getNextReminder(shootDate) {
   const shoot = new Date(shootDate + 'T00:00:00');
   if (isNaN(shoot.getTime())) return null;
   const today = new Date(); today.setHours(0,0,0,0);
-  for (let n = 1; n <= 365; n++) {
-    const d = new Date(shoot);
-    d.setDate(d.getDate() + 6 * n);
-    if (d >= today) return d;
-  }
-  return null;
+  // O(1): calculate the smallest n≥1 where shoot+6n ≥ today
+  const daysSince = Math.ceil((today - shoot) / 86400000);
+  const n = Math.max(1, Math.ceil(daysSince / 6));
+  const result = new Date(shoot);
+  result.setDate(result.getDate() + 6 * n);
+  return result;
 }
 
 function sentimentPill(s) {

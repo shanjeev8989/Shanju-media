@@ -1,7 +1,7 @@
 # Claude Code Rules — Shanju Media
 
 ## Git
-- Do NOT commit or push automatically. Always wait for me to explicitly say "commit" or "push".
+- Do NOT ask for commit or push. I will manually tell you if needed.
 - When I do ask to commit, stage only relevant files — never commit `.env` or `config.js`.
 
 ## Code
