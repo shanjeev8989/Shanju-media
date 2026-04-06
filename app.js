@@ -2145,25 +2145,33 @@ function renderDailyUpdate() {
         ${carryovers.map(t => `<div style="font-size:13px;padding:3px 0;color:#78350f;">• ${t}</div>`).join('')}
       </div>` : '';
 
+    // Pre-fill from draft saved in DB (morning_done=false) or localStorage
+    const draftBefore = todayRec?.before_lunch?.map(t=>t.task).join('\n') || localStorage.getItem(`du-draft-before-${currentUser}-${todayStr}`) || '';
+    const draftAfter  = todayRec?.after_lunch?.map(t=>t.task).join('\n')  || localStorage.getItem(`du-draft-after-${currentUser}-${todayStr}`)  || '';
+    const hasDraft    = !!(draftBefore || draftAfter);
+
     html = `
       <div class="card" style="border:2px solid var(--p400);">
         <div class="card-header">
           <span class="card-title">🌅 Morning Plan <span style="font-size:12px;color:var(--muted);font-weight:400;">(fill within 5 minutes of starting work)</span></span>
-          <span class="pill pill-warning">Not submitted</span>
+          ${hasDraft ? '<span class="pill pill-neutral">Draft saved</span>' : '<span class="pill pill-warning">Not submitted</span>'}
         </div>
         <div class="card-body">
           ${carryHtml}
           <div class="form-grid">
             <div class="fg">
               <label>Before Lunch — Tasks</label>
-              <textarea id="du-before" rows="5" placeholder="One task per line&#10;e.g. Edit Ramraj reel&#10;QC Gowtham footage&#10;Upload YouTube Short" style="font-size:13px;"></textarea>
+              <textarea id="du-before" rows="5" placeholder="One task per line&#10;e.g. Edit Ramraj reel&#10;QC Gowtham footage&#10;Upload YouTube Short" style="font-size:13px;">${draftBefore}</textarea>
             </div>
             <div class="fg">
               <label>After Lunch — Tasks</label>
-              <textarea id="du-after" rows="5" placeholder="One task per line&#10;e.g. Caption 3 posts&#10;Export final video&#10;Send for QC" style="font-size:13px;"></textarea>
+              <textarea id="du-after" rows="5" placeholder="One task per line&#10;e.g. Caption 3 posts&#10;Export final video&#10;Send for QC" style="font-size:13px;">${draftAfter}</textarea>
             </div>
           </div>
-          <button class="btn btn-primary" onclick="saveMorningPlan()" style="margin-top:4px;">Submit Morning Plan</button>
+          <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="saveMorningPlan()">Submit Morning Plan</button>
+            <button class="btn" onclick="saveMorningDraft()">Save for Now</button>
+          </div>
         </div>
       </div>`;
   } else {
@@ -2206,9 +2214,10 @@ function renderDailyUpdate() {
           ${before.length ? before.map((t,i) => taskRow(t,'before',i)).join('') : '<div class="empty-state" style="margin:8px 0;">No tasks added</div>'}
           <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin:16px 0 4px;">After Lunch</div>
           ${after.length ? after.map((t,i) => taskRow(t,'after',i)).join('') : '<div class="empty-state" style="margin:8px 0;">No tasks added</div>'}
-          <div style="margin-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-            <button class="btn btn-primary" onclick="saveEodUpdate()">Save EOD Update</button>
-            ${todayRec.eod_done ? `<span class="pill pill-success">EOD update saved — ${eodDoneComp}/${eodDoneTotal} completed</span>` : ''}
+          <div style="margin-top:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="saveEodUpdate()">Submit EOD Update</button>
+            <button class="btn" onclick="saveEodProgress()">Save for Now</button>
+            ${todayRec.eod_done ? `<span class="pill pill-success">EOD submitted — ${eodDoneComp}/${eodDoneTotal} completed</span>` : ''}
           </div>
         </div>
       </div>`;
@@ -2342,6 +2351,34 @@ function onEodStatusChange(section, idx) {
   if (wrap) wrap.style.display = (val === 'not_done' || val === 'in_progress') ? 'block' : 'none';
 }
 
+async function saveMorningDraft() {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const beforeVal = document.getElementById('du-before')?.value || '';
+  const afterVal  = document.getElementById('du-after')?.value  || '';
+
+  // Save to localStorage as immediate backup
+  localStorage.setItem(`du-draft-before-${currentUser}-${todayStr}`, beforeVal);
+  localStorage.setItem(`du-draft-after-${currentUser}-${todayStr}`,  afterVal);
+
+  // Also persist to DB so it syncs across devices
+  const before = beforeVal.split('\n').map(s=>s.trim()).filter(Boolean).map(task=>({task,status:'',reason:''}));
+  const after  = afterVal.split('\n').map(s=>s.trim()).filter(Boolean).map(task=>({task,status:'',reason:''}));
+  if (before.length || after.length) {
+    setSyncing(); _markLocalWrite();
+    const { data, error } = await sb.from('daily_updates')
+      .upsert([{ member_name: currentUser, update_date: todayStr, before_lunch: before, after_lunch: after, morning_done: false, eod_done: false }],
+        { onConflict: 'member_name,update_date' }).select();
+    if (!error && data) {
+      const idx = dailyUpdates.findIndex(d => d.member_name === currentUser && d.update_date === todayStr);
+      if (idx >= 0) dailyUpdates[idx] = data[0]; else dailyUpdates.push(data[0]);
+      setSynced();
+    }
+  }
+  toast('Draft saved — come back anytime to submit.');
+  // Refresh pill to show "Draft saved"
+  renderDailyUpdate();
+}
+
 async function saveMorningPlan() {
   const before = (document.getElementById('du-before')?.value || '')
     .split('\n').map(s => s.trim()).filter(Boolean).map(task => ({ task, status:'', reason:'' }));
@@ -2356,11 +2393,36 @@ async function saveMorningPlan() {
   setSyncing(); _markLocalWrite();
   const { data, error } = await sb.from('daily_updates').upsert([row], { onConflict: 'member_name,update_date' }).select();
   if (error) { setSyncError(); toast('Save failed: ' + error.message); return; }
-  setSynced(); toast('Morning plan saved!');
+  setSynced(); toast('Morning plan submitted!');
+
+  // Clear localStorage draft once officially submitted
+  localStorage.removeItem(`du-draft-before-${currentUser}-${todayStr}`);
+  localStorage.removeItem(`du-draft-after-${currentUser}-${todayStr}`);
 
   const idx = dailyUpdates.findIndex(d => d.member_name === currentUser && d.update_date === todayStr);
   if (idx >= 0) dailyUpdates[idx] = data[0]; else dailyUpdates.push(data[0]);
   renderDailyUpdate();
+}
+
+async function saveEodProgress() {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const rec = dailyUpdates.find(d => d.member_name === currentUser && d.update_date === todayStr);
+  if (!rec) return;
+
+  const collect = (tasks, section) => tasks.map((t, i) => ({
+    task:   t.task,
+    status: document.getElementById(`eod-status-${section}-${i}`)?.value || t.status || '',
+    reason: document.getElementById(`eod-reason-${section}-${i}`)?.value || t.reason || '',
+  }));
+  const before = collect(rec.before_lunch || [], 'before');
+  const after  = collect(rec.after_lunch  || [], 'after');
+
+  const ok = await dbUpdate('daily_updates', rec.id, { before_lunch: before, after_lunch: after });
+  if (ok) {
+    const idx = dailyUpdates.findIndex(d => d.id === rec.id);
+    dailyUpdates[idx] = { ...rec, before_lunch: before, after_lunch: after };
+    toast('Progress saved — submit when all done.');
+  }
 }
 
 async function saveEodUpdate() {
