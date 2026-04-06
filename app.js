@@ -28,7 +28,8 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let tasks = [], shoots = [], posts = [], pipeline = [], payments = [], invoices = [];
 let clientFollowups = [], clientReviews = [];
 let dailyUpdates = [];
-let teamDailyViewDate = new Date().toISOString().split('T')[0];
+let teamDailyViewDate   = new Date().toISOString().split('T')[0];
+let dailyMonthView      = new Date().toISOString().slice(0, 7); // "YYYY-MM"
 let teamProfiles = []; // all approved profiles — used for editor dropdown
 let currentUser = 'Shanju';
 let currentProfile = null; // { id, name, role }  — set after login
@@ -1938,7 +1939,126 @@ function renderDailyUpdate() {
       </div>`;
   }
 
+  // Monthly history section (always shown below the daily form)
+  html += `
+    <div class="card" style="margin-top:16px;">
+      <div class="card-header">
+        <span class="card-title">📅 Monthly History</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button class="btn btn-sm" onclick="dailyMonthPrev()">&#9664;</button>
+          <span id="daily-month-label" style="font-size:13px;font-weight:600;min-width:100px;text-align:center;">${fmtMonth(dailyMonthView)}</span>
+          <button class="btn btn-sm" onclick="dailyMonthNext()">&#9654;</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;overflow-x:auto;" id="daily-month-body">
+        <div class="loading"><div class="spinner"></div>Loading...</div>
+      </div>
+    </div>`;
+
   document.getElementById('daily-update-body').innerHTML = html;
+  loadDailyMonthData();
+}
+
+function fmtMonth(ym) {
+  const [y, m] = ym.split('-');
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-IN', { month:'long', year:'numeric' });
+}
+
+function dailyMonthPrev() {
+  const [y, m] = dailyMonthView.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  dailyMonthView = d.toISOString().slice(0, 7);
+  document.getElementById('daily-month-label').textContent = fmtMonth(dailyMonthView);
+  loadDailyMonthData();
+}
+function dailyMonthNext() {
+  const [y, m] = dailyMonthView.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  dailyMonthView = d.toISOString().slice(0, 7);
+  document.getElementById('daily-month-label').textContent = fmtMonth(dailyMonthView);
+  loadDailyMonthData();
+}
+
+async function loadDailyMonthData() {
+  const [y, m] = dailyMonthView.split('-').map(Number);
+  const from = `${dailyMonthView}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const to   = `${dailyMonthView}-${String(lastDay).padStart(2,'0')}`;
+
+  const { data } = await sb.from('daily_updates').select('*')
+    .eq('member_name', currentUser).gte('update_date', from).lte('update_date', to)
+    .order('update_date', { ascending: false });
+
+  const records = data || [];
+  const body = document.getElementById('daily-month-body');
+  if (!body) return;
+
+  if (!records.length) {
+    body.innerHTML = `<div class="empty-state" style="padding:20px;">No entries for ${fmtMonth(dailyMonthView)}.</div>`;
+    return;
+  }
+
+  const rows = records.map(rec => {
+    const before = rec.before_lunch || [];
+    const after  = rec.after_lunch  || [];
+    const all    = [...before, ...after];
+    const comp   = all.filter(t => t.status === 'completed').length;
+    const inprog = all.filter(t => t.status === 'in_progress').length;
+    const notdone= all.filter(t => t.status === 'not_done').length;
+    const total  = all.length;
+    const pct    = total ? Math.round(comp / total * 100) : 0;
+
+    const dayLabel = new Date(rec.update_date + 'T00:00:00').toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
+    const safeId   = rec.update_date.replace(/-/g,'');
+
+    const detailHtml = `<tr id="mdetail-${safeId}" style="display:none;background:var(--bg);">
+      <td colspan="8" style="padding:12px 16px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Before Lunch</div>
+        ${before.map(t => `<div style="display:flex;gap:8px;padding:3px 0;font-size:13px;">
+          <span>${t.status==='completed'?'✅':t.status==='in_progress'?'🔄':t.status==='not_done'?'❌':'⏳'}</span>
+          <span style="flex:1;">${t.task}</span>
+          ${t.reason?`<span style="font-size:11px;color:var(--muted);font-style:italic;">← ${t.reason}</span>`:''}
+        </div>`).join('') || '<div style="color:var(--muted);font-size:12px;">None</div>'}
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin:10px 0 6px;">After Lunch</div>
+        ${after.map(t => `<div style="display:flex;gap:8px;padding:3px 0;font-size:13px;">
+          <span>${t.status==='completed'?'✅':t.status==='in_progress'?'🔄':t.status==='not_done'?'❌':'⏳'}</span>
+          <span style="flex:1;">${t.task}</span>
+          ${t.reason?`<span style="font-size:11px;color:var(--muted);font-style:italic;">← ${t.reason}</span>`:''}
+        </div>`).join('') || '<div style="color:var(--muted);font-size:12px;">None</div>'}
+      </td>
+    </tr>`;
+
+    return `<tr onclick="toggleMDetail('${safeId}')" style="cursor:pointer;">
+      <td style="font-weight:600;">${dayLabel}</td>
+      <td>${before.length}</td>
+      <td>${after.length}</td>
+      <td style="color:var(--success);font-weight:700;">${comp}</td>
+      <td style="color:var(--warning);font-weight:700;">${inprog}</td>
+      <td style="color:var(--danger);font-weight:700;">${notdone}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div style="flex:1;height:6px;background:var(--border);border-radius:3px;min-width:60px;">
+            <div style="width:${pct}%;height:6px;background:var(--success);border-radius:3px;"></div>
+          </div>
+          <span style="font-size:12px;color:var(--muted);">${pct}%</span>
+        </div>
+      </td>
+      <td>${rec.eod_done?'<span class="pill pill-success">Done</span>':'<span class="pill pill-neutral">Pending</span>'}</td>
+    </tr>${detailHtml}`;
+  }).join('');
+
+  body.innerHTML = `<table class="tbl">
+    <thead><tr>
+      <th>Day</th><th>Before Lunch</th><th>After Lunch</th>
+      <th>✅ Done</th><th>🔄 Progress</th><th>❌ Not Done</th><th>Completion</th><th>EOD</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function toggleMDetail(safeId) {
+  const row = document.getElementById('mdetail-' + safeId);
+  if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
 }
 
 function onEodStatusChange(section, idx) {
