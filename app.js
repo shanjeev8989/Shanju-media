@@ -26,6 +26,7 @@
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let tasks = [], shoots = [], posts = [], pipeline = [], payments = [], invoices = [];
+let clientFollowups = [], clientReviews = [];
 let teamProfiles = []; // all approved profiles — used for editor dropdown
 let currentUser = 'Shanju';
 let currentProfile = null; // { id, name, role }  — set after login
@@ -74,7 +75,10 @@ function toast(msg, dur = 2500) {
 
 
 // ---- 3. DATABASE FUNCTIONS ----
-async function loadAll() {
+let _loadLock = false;
+async function loadAll(silent = false) {
+  if (_loadLock) return;
+  _loadLock = true;
   try {
     const queries = [
       sb.from('tasks').select('*').order('created_at', { ascending: false }),
@@ -84,22 +88,30 @@ async function loadAll() {
       sb.from('payments').select('*').order('created_at', { ascending: false }),
       sb.from('invoices').select('*').order('created_at', { ascending: false }),
       sb.from('profiles').select('*').eq('status', 'approved'),
+      sb.from('client_followups').select('*').order('shoot_date'),
+      sb.from('client_reviews').select('*').order('review_date', { ascending: false }),
     ];
-    const [t, s, p, pl, pay, inv, prof] = await Promise.all(queries);
+    const [t, s, p, pl, pay, inv, prof, cf, cr] = await Promise.all(queries);
     tasks = t.data || []; shoots = s.data || []; posts = p.data || [];
     pipeline = pl.data || []; payments = pay.data || []; invoices = inv.data || [];
     teamProfiles = prof.data || [];
+    clientFollowups = cf.data || []; clientReviews = cr.data || [];
     populateEditorDropdown();
     populateTeamDropdowns();
 
-    await loadPendingUsers(); // owner only — no-op for others
+    await loadPendingUsers();
 
     setSynced();
-    renderPage(document.querySelector('.page.active')?.id.replace('page-', ''));
-    updatePayNotif();
+    // silent=true when called from realtime — don't re-render, just update data
+    if (!silent) {
+      renderPage(document.querySelector('.page.active')?.id.replace('page-', ''));
+      updatePayNotif();
+    }
   } catch (e) {
     setSyncError();
     console.error(e);
+  } finally {
+    _loadLock = false;
   }
 }
 
@@ -132,7 +144,22 @@ function populateTeamDropdowns() {
   }
 }
 
+// Parse advance amount stored in notes field as [ADV:5000]
+function parseAdvance(p) {
+  const m = (p.notes || '').match(/^\[ADV:(\d+(?:\.\d+)?)\]/);
+  return m ? Number(m[1]) : (Number(p.advance) || 0);
+}
+function parseNotes(p) {
+  return (p.notes || '').replace(/^\[ADV:\d+(?:\.\d+)?\]\s*/, '');
+}
+
+// Set this flag before any local write — realtime will skip its reload for 4s
+let _localWriteTs = 0;
+function _markLocalWrite() { _localWriteTs = Date.now(); }
+function _wasLocalWrite() { return (Date.now() - _localWriteTs) < 4000; }
+
 async function dbInsert(table, row, silent = false) {
+  _markLocalWrite();
   setSyncing();
   const { data, error } = await sb.from(table).insert([row]).select();
   if (error) { setSyncError(); toast('Save failed: ' + error.message); return null; }
@@ -142,6 +169,7 @@ async function dbInsert(table, row, silent = false) {
 }
 
 async function dbUpdate(table, id, row) {
+  _markLocalWrite();
   setSyncing();
   const { error } = await sb.from(table).update(row).eq('id', id);
   if (error) { setSyncError(); toast('Update failed: ' + error.message); return false; }
@@ -149,6 +177,7 @@ async function dbUpdate(table, id, row) {
 }
 
 async function dbDelete(table, id) {
+  _markLocalWrite();
   setSyncing();
   const { error } = await sb.from(table).delete().eq('id', id);
   if (error) { setSyncError(); toast('Delete failed: ' + error.message); return false; }
@@ -159,9 +188,9 @@ async function dbDelete(table, id) {
 // ---- 4. NAVIGATION ----
 function nav(id, el) {
   const role = currentProfile?.role;
-  // Finance pages: owner only
-  if ((id === 'payments' || id === 'invoices') && role !== 'owner') {
-    toast('Access restricted — Finance is visible to Owner only.');
+  // Finance + founder pages: owner only
+  if ((id === 'payments' || id === 'invoices' || id === 'client-followup') && role !== 'owner') {
+    toast('Access restricted — visible to Owner only.');
     return;
   }
   // Work pages (All Tasks, Kanban, Team): owner and manager only
@@ -188,8 +217,9 @@ function renderPage(id) {
   else if (id === 'shoot-cal') renderShootCal();
   else if (id === 'post-cal')  renderPostCal();
   else if (id === 'pipeline')  renderPipeline();
-  else if (id === 'payments')  renderPayments();
-  else if (id === 'invoices')  renderInvoices();
+  else if (id === 'payments')        renderPayments();
+  else if (id === 'invoices')        renderInvoices();
+  else if (id === 'client-followup') renderClientFollowup();
 }
 
 function switchUser() {
@@ -297,9 +327,10 @@ async function loadProfile(user) {
   }
 
   // Hide nav sections based on role
-  // manager + editor: no finance
+  // manager + editor: no finance, no founder section
   if (profile.role !== 'owner') {
     document.querySelectorAll('[data-section="finance"]').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('[data-section="founder"]').forEach(el => el.style.display = 'none');
   }
   // editor only: no work section (All Tasks, Kanban, Team)
   if (profile.role === 'editor') {
@@ -445,6 +476,10 @@ function renderDash() {
   if (todoCard) todoCard.style.display = isOwner ? 'block' : 'none';
   if (isOwner) renderTodos();
 
+  const followupCard = document.getElementById('followup-dash-card');
+  if (followupCard) followupCard.style.display = isOwner ? 'block' : 'none';
+  if (isOwner) renderFollowupDash();
+
   document.getElementById('dash-title').textContent = isOwner ? 'Founder Dashboard' : `${currentUser}'s Dashboard`;
   document.getElementById('dash-sub').textContent   = isOwner ? 'Full company overview' : 'Your personal workspace';
   document.getElementById('focus-title').textContent = isOwner ? '🎯 Founder Focus Today' : '🎯 My Focus Today';
@@ -458,7 +493,7 @@ function renderDash() {
   const dueToday  = myActive.filter(t => daysDiff(t.deadline) === 0);
   const review    = myActive.filter(t => t.status === 'Sent for Caption');
   const pendingPay = payments.filter(p => p.status === 'Pending' || p.status === 'Partially Paid');
-  const pendingAmt = pendingPay.reduce((s, p) => s + Math.max(0, Number(p.amount) - Number(p.advance || 0)), 0);
+  const pendingAmt = pendingPay.reduce((s, p) => s + Math.max(0, Number(p.amount) - parseAdvance(p)), 0);
 
   let m = '';
   if (isOwner) {
@@ -1296,9 +1331,8 @@ function updatePayNotif() {
 function renderPayments() {
   const pending  = payments.filter(p => p.status === 'Pending' || p.status === 'Partially Paid');
   const advances = payments.filter(p => p.status === 'Advance Received');
-  // Pending = total amount minus any advance already received
-  const totalPending   = pending.reduce((s, p) => s + Math.max(0, Number(p.amount) - Number(p.advance || 0)), 0);
-  const totalAdvances  = payments.reduce((s, p) => s + Number(p.advance || 0), 0);
+  const totalPending   = pending.reduce((s, p) => s + Math.max(0, Number(p.amount) - parseAdvance(p)), 0);
+  const totalAdvances  = payments.reduce((s, p) => s + parseAdvance(p), 0);
   const totalCollected = payments.filter(p => p.status === 'Paid').reduce((s, p) => s + Number(p.amount), 0);
 
   document.getElementById('pay-metrics').innerHTML = `
@@ -1314,7 +1348,7 @@ function renderPayments() {
 
   document.getElementById('pay-pending-list').innerHTML = pending.length
     ? pending.map(p => {
-        const adv = Number(p.advance || 0);
+        const adv = parseAdvance(p);
         const bal = Math.max(0, Number(p.amount) - adv);
         return `
         <div class="alert-row"><div class="adot adot-red"></div>
@@ -1336,17 +1370,17 @@ function renderPayments() {
     : '<div class="empty-state">No advance records.</div>';
 
   document.getElementById('pay-body').innerHTML = payments.map(p => {
-    const adv       = Number(p.advance) || 0;
-    const remaining = Number(p.amount) - adv;
+    const adv       = parseAdvance(p);
+    const remaining = Math.max(0, Number(p.amount) - adv);
     return `<tr>
     <td style="font-weight:600;">${p.client}</td>
     <td style="font-weight:700;color:var(--p700);">${fmtMoney(p.amount)}</td>
     <td style="color:var(--success);font-weight:600;">${adv ? fmtMoney(adv) : '—'}</td>
-    <td style="color:${remaining > 0 ? 'var(--danger)' : 'var(--muted)'};font-weight:${remaining > 0 ? '600' : '400'};">${adv ? fmtMoney(remaining) : '—'}</td>
+    <td style="color:${adv && remaining > 0 ? 'var(--danger)' : 'var(--muted)'};font-weight:${adv && remaining > 0 ? '600' : '400'};">${adv ? fmtMoney(remaining) : '—'}</td>
     <td><span style="font-size:11px;color:var(--muted);">${p.type || ''}</span></td>
     <td>${payBadge(p.status)}</td>
     <td>${fmt(p.due_date)}</td>
-    <td style="font-size:12px;color:var(--muted);">${p.notes || ''}</td>
+    <td style="font-size:12px;color:var(--muted);">${parseNotes(p)}</td>
     <td><button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')">✕</button></td>
   </tr>`;
   }).join('');
@@ -1501,18 +1535,22 @@ async function savePipeline() {
 }
 
 async function savePayment() {
-  const client = document.getElementById('pay-client').value.trim();
-  const amount = document.getElementById('pay-amount').value;
+  const client  = document.getElementById('pay-client').value.trim();
+  const amount  = document.getElementById('pay-amount').value;
+  const advance = Number(document.getElementById('pay-advance').value) || 0;
   if (!client || !amount) { toast('Client and amount required.'); return; }
+  // Encode advance in notes so it works without a DB column change
+  // Format: [ADV:5000] rest of notes
+  const rawNotes = document.getElementById('pay-notes').value;
+  const notes    = advance > 0 ? `[ADV:${advance}] ${rawNotes}`.trim() : rawNotes;
   const row = {
     client,
     amount:   Number(amount),
-    advance:  Number(document.getElementById('pay-advance').value) || 0,
     type:     document.getElementById('pay-type').value,
     status:   document.getElementById('pay-status').value,
     due_date: document.getElementById('pay-due').value || null,
     project:  document.getElementById('pay-project').value,
-    notes:    document.getElementById('pay-notes').value,
+    notes,
   };
   const saved = await dbInsert('payments', row);
   if (saved) { payments.unshift(saved); closeModal('modal-payment'); renderPayments(); }
@@ -1537,17 +1575,280 @@ async function saveInvoice() {
 }
 
 
+// ---- CLIENT FOLLOW-UP ----
+
+function getNextReminder(shootDate) {
+  const shoot = new Date(shootDate + 'T00:00:00');
+  const today = new Date(); today.setHours(0,0,0,0);
+  for (let n = 1; n <= 365; n++) {
+    const d = new Date(shoot);
+    d.setDate(d.getDate() + 6 * n);
+    if (d >= today) return d;
+  }
+  return null;
+}
+
+function sentimentPill(s) {
+  const m = { positive:'pill-success', neutral:'pill-info', negative:'pill-danger' };
+  return `<span class="pill ${m[s] || 'pill-neutral'}">${s || 'positive'}</span>`;
+}
+
+function renderClientFollowup() {
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // ---- Reminders table ----
+  const rows = clientFollowups
+    .map(f => ({ ...f, next: f.shoot_date ? getNextReminder(f.shoot_date) : null }))
+    .sort((a, b) => (a.next || new Date('9999-12-31')) - (b.next || new Date('9999-12-31')));
+
+  document.getElementById('fu-reminders-body').innerHTML = rows.length
+    ? rows.map(f => {
+        let autoCell = '<span style="color:var(--muted);">—</span>';
+        let dueCell  = '<span style="color:var(--muted);">—</span>';
+        if (f.next) {
+          const days = Math.round((f.next - today) / 86400000);
+          const col  = days < 0 ? 'var(--danger)' : days === 0 ? 'var(--warning)' : days <= 3 ? '#f59e0b' : 'var(--muted)';
+          autoCell   = fmt(f.next.toISOString().split('T')[0]);
+          dueCell    = `<span style="color:${col};font-weight:600;">${days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'Today' : `in ${days}d`}</span>`;
+        }
+        const manualStr = f.manual_date
+          ? `<span style="font-weight:600;">${fmt(f.manual_date)}</span>${f.manual_note ? `<br><span style="font-size:11px;color:var(--muted);">${f.manual_note}</span>` : ''}`
+          : `<span style="color:var(--muted);">—</span>`;
+        return `<tr>
+          <td style="font-weight:600;">${f.client_name}</td>
+          <td>${f.shoot_date ? fmt(f.shoot_date) : '<span style="color:var(--muted);">—</span>'}</td>
+          <td>${autoCell}</td>
+          <td>${dueCell}</td>
+          <td style="font-size:12px;">${manualStr}</td>
+          <td style="font-size:11px;color:var(--muted);">${f.notes || ''}</td>
+          <td style="display:flex;gap:4px;">
+            <button class="btn btn-sm btn-primary" onclick="openReviewModal('${f.id}','${f.client_name}')">+ Review</button>
+            <button class="btn btn-sm btn-danger"  onclick="deleteFollowup('${f.id}')">✕</button>
+          </td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="7" class="empty-state">No clients added yet. Click "+ Add Client" to start.</td></tr>`;
+
+  // ---- Populate filter dropdowns ----
+  const clients = [...new Set(clientFollowups.map(f => f.client_name))];
+  const rvCl = document.getElementById('rv-filter-client');
+  if (rvCl) {
+    const cur = rvCl.value;
+    rvCl.innerHTML = '<option value="">All clients</option>' +
+      clients.map(c => `<option${c === cur ? ' selected' : ''}>${c}</option>`).join('');
+  }
+  const months = [];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  const rvMo = document.getElementById('rv-filter-month');
+  if (rvMo) {
+    const cur = rvMo.value;
+    rvMo.innerHTML = '<option value="">All months</option>' +
+      months.map(m => `<option value="${m}"${m === cur ? ' selected' : ''}>${new Date(m+'-01').toLocaleDateString('en-IN',{month:'long',year:'numeric'})}</option>`).join('');
+  }
+
+  // ---- Reviews table ----
+  const filterClient    = rvCl?.value || '';
+  const filterMonth     = rvMo?.value || '';
+  const filterSentiment = document.getElementById('rv-filter-sentiment')?.value || '';
+
+  let filtered = clientReviews;
+  if (filterClient)    filtered = filtered.filter(r => r.client_name === filterClient);
+  if (filterMonth)     filtered = filtered.filter(r => (r.review_date || '').startsWith(filterMonth));
+  if (filterSentiment) filtered = filtered.filter(r => r.sentiment === filterSentiment);
+
+  document.getElementById('rv-body').innerHTML = filtered.length
+    ? filtered.map(r => `<tr>
+        <td style="font-weight:600;">${r.client_name}</td>
+        <td style="font-size:12px;max-width:260px;">${r.review_text || '—'}</td>
+        <td>${sentimentPill(r.sentiment)}</td>
+        <td>${fmt(r.review_date)}</td>
+        <td><button class="btn btn-sm btn-danger" onclick="deleteReview('${r.id}')">✕</button></td>
+      </tr>`).join('')
+    : `<tr><td colspan="5" class="empty-state">No reviews yet.</td></tr>`;
+}
+
+function renderFollowupDash() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const in3   = new Date(today); in3.setDate(in3.getDate() + 3);
+  const now   = new Date();
+  const lastMonthPfx = `${new Date(now.getFullYear(), now.getMonth()-1, 1).getFullYear()}-${String(new Date(now.getFullYear(), now.getMonth()-1, 1).getMonth()+1).padStart(2,'0')}`;
+
+  const todayStr = today.toISOString().split('T')[0];
+
+  // Manual follow-ups due today
+  const manualToday = clientFollowups.filter(f => f.manual_date === todayStr);
+
+  // Auto 6-day upcoming (next 3 days)
+  const upcoming = clientFollowups
+    .map(f => ({ ...f, next: getNextReminder(f.shoot_date) }))
+    .filter(f => f.next && f.next <= in3)
+    .sort((a, b) => a.next - b.next);
+
+  const negLastMonth = clientReviews.filter(r => r.sentiment === 'negative' && (r.review_date || '').startsWith(lastMonthPfx));
+  const recent = clientReviews.slice(0, 4);
+
+  let html = '';
+
+  // Manual follow-ups today — shown at the very top with high priority
+  if (manualToday.length) {
+    html += `<div style="margin-bottom:14px;"><div style="font-size:11px;font-weight:700;color:var(--warning);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">📌 Manual Follow-Up — Today</div>`;
+    html += manualToday.map(f => `<div class="alert-row" style="border-left:3px solid var(--warning);padding-left:10px;">
+      <div class="adot adot-yellow"></div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;">${f.client_name}</div>
+        <div style="font-size:12px;color:var(--muted);">${f.manual_note || 'Follow up today'} · Shoot: ${fmt(f.shoot_date)}</div>
+      </div>
+      <button class="btn btn-sm btn-primary" onclick="openReviewModal('${f.id}','${f.client_name}')">+ Review</button>
+    </div>`).join('');
+    html += '</div>';
+  }
+
+  if (upcoming.length) {
+    html += `<div style="margin-bottom:14px;"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Upcoming Auto Checkups</div>`;
+    html += upcoming.map(f => {
+      const days = Math.round((f.next - today) / 86400000);
+      return `<div class="alert-row">
+        <div class="adot ${days <= 0 ? 'adot-yellow' : 'adot-blue'}"></div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;">${f.client_name}</div>
+          <div style="font-size:12px;color:var(--muted);">${days <= 0 ? 'Due today' : `in ${days}d`} · Shoot: ${fmt(f.shoot_date)}</div>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="openReviewModal('${f.id}','${f.client_name}')">+ Review</button>
+      </div>`;
+    }).join('');
+    html += '</div>';
+  }
+
+  if (negLastMonth.length) {
+    html += `<div style="margin-bottom:14px;"><div style="font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">⚠ Negative Reviews — Last Month</div>`;
+    html += negLastMonth.map(r => `<div class="alert-row">
+      <div class="adot adot-red"></div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;">${r.client_name}</div>
+        <div style="font-size:12px;color:var(--muted);">${r.review_text || '—'} · ${fmt(r.review_date)}</div>
+      </div>
+    </div>`).join('');
+    html += '</div>';
+  }
+
+  if (recent.length) {
+    const sentColor = s => s === 'positive' ? 'var(--success)' : s === 'negative' ? 'var(--danger)' : 'var(--muted)';
+    html += `<div><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Recent Reviews</div>`;
+    html += recent.map(r => `<div class="alert-row">
+      <div class="adot" style="background:${sentColor(r.sentiment)};width:8px;height:8px;border-radius:50%;flex-shrink:0;"></div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;">${r.client_name} <span style="font-size:11px;color:${sentColor(r.sentiment)};font-weight:600;">${r.sentiment || 'positive'}</span></div>
+        <div style="font-size:12px;color:var(--muted);">${r.review_text || '—'} · ${fmt(r.review_date)}</div>
+      </div>
+    </div>`).join('');
+    html += '</div>';
+  }
+
+  if (!upcoming.length && !negLastMonth.length && !recent.length) {
+    html = `<div class="empty-state">No follow-ups yet. <span style="color:var(--p700);cursor:pointer;" onclick="nav('client-followup',null)">Add clients →</span></div>`;
+  }
+
+  document.getElementById('followup-dash-body').innerHTML = html;
+}
+
+function openReviewModal(followupId, clientName) {
+  document.getElementById('rv-followup-id').value = followupId || '';
+  document.getElementById('rv-client').value      = clientName || '';
+  document.getElementById('rv-date').value        = new Date().toISOString().split('T')[0];
+  document.getElementById('rv-text').value        = '';
+  document.getElementById('rv-sentiment').value   = 'positive';
+  openModal('modal-review');
+}
+
+async function saveFollowup() {
+  const name = document.getElementById('fu-client-name').value.trim();
+  const date = document.getElementById('fu-shoot-date').value;
+  if (!name) { toast('Client name is required.'); return; }
+  const row = {
+    client_name:  name,
+    shoot_date:   date || null,
+    notes:        document.getElementById('fu-notes').value,
+    manual_date:  document.getElementById('fu-manual-date').value || null,
+    manual_note:  document.getElementById('fu-manual-note').value.trim() || null,
+  };
+  const saved = await dbInsert('client_followups', row);
+  if (saved) {
+    clientFollowups.push(saved);
+    clientFollowups.sort((a, b) => new Date(a.shoot_date) - new Date(b.shoot_date));
+    // clear fields
+    ['fu-client-name','fu-shoot-date','fu-manual-date','fu-manual-note','fu-notes'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    closeModal('modal-followup');
+    renderClientFollowup();
+    renderDash();
+  }
+}
+
+async function saveReview() {
+  const client    = document.getElementById('rv-client').value.trim();
+  const text      = document.getElementById('rv-text').value.trim();
+  const sentiment = document.getElementById('rv-sentiment').value;
+  const date      = document.getElementById('rv-date').value;
+  const fid       = document.getElementById('rv-followup-id').value || null;
+  if (!client) { toast('Client name is required.'); return; }
+  const row = { client_name: client, review_text: text, sentiment, review_date: date, followup_id: fid };
+  const saved = await dbInsert('client_reviews', row);
+  if (saved) {
+    clientReviews.unshift(saved);
+    closeModal('modal-review');
+    const activePage = document.querySelector('.page.active')?.id.replace('page-', '');
+    if (activePage === 'client-followup') renderClientFollowup();
+    renderDash();
+  }
+}
+
+async function deleteFollowup(id) {
+  if (!confirm('Delete this client follow-up and all its reminders?')) return;
+  await dbDelete('client_followups', id);
+  clientFollowups = clientFollowups.filter(f => f.id !== id);
+  renderClientFollowup();
+  renderDash();
+}
+
+async function deleteReview(id) {
+  if (!confirm('Delete this review?')) return;
+  await dbDelete('client_reviews', id);
+  clientReviews = clientReviews.filter(r => r.id !== id);
+  renderClientFollowup();
+  renderDash();
+}
+
+
 // ---- 17. REALTIME + INIT ----
 let _realtimeTimer = null;
+let _tabWasHidden  = false;
+
 function setupRealtime() {
   sb.channel('db-changes')
     .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-      // Debounce: only reload once, 2s after the last remote change
-      // This prevents stacking reloads when you make multiple saves quickly
+      // Own writes: skip entirely — local state already updated
+      if (_wasLocalWrite()) return;
+      // Tab hidden: just flag, don't queue work
+      if (document.hidden) { _tabWasHidden = true; return; }
+      // Someone else changed data: debounce, reload silently (no re-render freeze)
       clearTimeout(_realtimeTimer);
-      _realtimeTimer = setTimeout(() => { loadAll(); }, 2000);
+      _realtimeTimer = setTimeout(() => { if (!_loadLock) loadAll(true); }, 3000);
     })
     .subscribe();
+
+  // Tab becomes visible: if external changes happened, do one silent reload
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && currentProfile && _tabWasHidden) {
+      _tabWasHidden = false;
+      clearTimeout(_realtimeTimer);
+      if (!_loadLock) loadAll(true);
+    }
+  });
 }
 
 // Start by checking if the user is already logged in

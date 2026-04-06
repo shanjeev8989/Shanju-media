@@ -122,6 +122,9 @@
     <div class="nav-item" data-section="planning" onclick="nav('post-cal',this)"> <span class="nav-icon">📅</span> Post Calendar</div>
     <div class="nav-item" data-section="planning" onclick="nav('pipeline',this)"> <span class="nav-icon">🚀</span> Post Pipeline</div>
 
+    <div class="nav-section" data-section="founder">Clients</div>
+    <div class="nav-item" data-section="founder" onclick="nav('client-followup',this)"><span class="nav-icon">🤝</span> Client Follow-Up</div>
+
     <div class="nav-section" data-section="finance">Finance</div>
     <div class="nav-item" data-section="finance" onclick="nav('payments',this)">
       <span class="nav-icon">💰</span> Payments
@@ -167,6 +170,15 @@
 
       <div class="metric-grid" id="dash-metrics">
         <div class="loading"><div class="spinner"></div>Loading...</div>
+      </div>
+
+      <!-- Client Follow-Up Summary (founder only) -->
+      <div class="card" id="followup-dash-card" style="display:none;">
+        <div class="card-header">
+          <span class="card-title">🤝 Client Follow-Up</span>
+          <span onclick="nav('client-followup',null)" style="font-size:12px;color:var(--p700);cursor:pointer;font-weight:600;">View all →</span>
+        </div>
+        <div class="card-body" id="followup-dash-body"></div>
       </div>
 
       <!-- Caption Queue — shown to manager/owner when editors send tasks for caption -->
@@ -510,6 +522,53 @@
       <div id="invoice-list"></div>
     </div>
 
+    <!-- =====================================================
+         CLIENT FOLLOW-UP PAGE (founder only)
+         ===================================================== -->
+    <div class="page" id="page-client-followup">
+      <div class="topbar">
+        <div>
+          <div class="page-title">🤝 Client Follow-Up</div>
+          <div class="page-sub">6-day reminders, reviews &amp; feedback tracking</div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openModal('modal-followup')">+ Add Client</button>
+      </div>
+
+      <!-- Reminders -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">📅 Checkup Schedule</span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Client</th><th>Shoot Date</th><th>Next Auto (6-day)</th><th>Due</th><th>Manual Follow-Up</th><th>Notes</th><th></th></tr></thead>
+            <tbody id="fu-reminders-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Reviews -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">⭐ Client Reviews</span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <select id="rv-filter-client"    onchange="renderClientFollowup()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);"></select>
+            <select id="rv-filter-month"     onchange="renderClientFollowup()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);"></select>
+            <select id="rv-filter-sentiment" onchange="renderClientFollowup()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
+              <option value="">All sentiment</option>
+              <option value="positive">Positive</option>
+              <option value="neutral">Neutral</option>
+              <option value="negative">Negative</option>
+            </select>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Client</th><th>Review</th><th>Sentiment</th><th>Date</th><th></th></tr></thead>
+            <tbody id="rv-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </div><!-- end content -->
 </div><!-- end shell -->
 
@@ -707,6 +766,48 @@
      config.js  → your Supabase credentials
      app.js     → all the functionality
      ===================================================== -->
+<!-- Add Client Follow-Up -->
+<div class="modal-overlay" id="modal-followup">
+  <div class="modal">
+    <div class="modal-title">🤝 Add Client for Follow-Up</div>
+    <div class="form-grid">
+      <div class="fg"><label>Client Name</label><input id="fu-client-name" placeholder="e.g. Ramraj Silks"></div>
+      <div class="fg"><label>Shoot Date <span style="font-size:11px;color:var(--muted);">(optional)</span></label><input type="date" id="fu-shoot-date"></div>
+      <div class="fg"><label>Manual Follow-Up Date <span style="font-size:11px;color:var(--muted);">(optional)</span></label><input type="date" id="fu-manual-date"></div>
+      <div class="fg"><label>Manual Follow-Up Note</label><input id="fu-manual-note" placeholder="e.g. Call to check satisfaction"></div>
+    </div>
+    <div class="fg"><label>Notes</label><textarea id="fu-notes" placeholder="Any context for follow-ups..."></textarea></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-followup')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFollowup()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Record Review -->
+<div class="modal-overlay" id="modal-review">
+  <div class="modal">
+    <div class="modal-title">⭐ Record Client Review</div>
+    <input type="hidden" id="rv-followup-id">
+    <div class="form-grid">
+      <div class="fg"><label>Client Name</label><input id="rv-client" placeholder="e.g. Ramraj Silks"></div>
+      <div class="fg"><label>Review Date</label><input type="date" id="rv-date"></div>
+      <div class="fg"><label>Sentiment</label>
+        <select id="rv-sentiment">
+          <option value="positive">Positive</option>
+          <option value="neutral">Neutral</option>
+          <option value="negative">Negative</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg"><label>Feedback / Notes</label><textarea id="rv-text" placeholder="What did the client say?" rows="3"></textarea></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-review')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveReview()">Save Review</button>
+    </div>
+  </div>
+</div>
+
 <script src="config.js"></script>
 <script src="app.js"></script>
 

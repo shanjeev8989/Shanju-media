@@ -1,3 +1,34 @@
+## Step 8 — Client Follow-Up tables (run after Step 7)
+
+```sql
+CREATE TABLE IF NOT EXISTS client_followups (
+  id          uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at  timestamptz DEFAULT now(),
+  client_name text NOT NULL,
+  shoot_date  date NOT NULL,
+  notes       text,
+  manual_date date,
+  manual_note text
+);
+
+CREATE TABLE IF NOT EXISTS client_reviews (
+  id          uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at  timestamptz DEFAULT now(),
+  followup_id uuid REFERENCES client_followups(id) ON DELETE SET NULL,
+  client_name text NOT NULL,
+  review_text text,
+  sentiment   text DEFAULT 'positive',
+  review_date date DEFAULT CURRENT_DATE
+);
+
+ALTER TABLE client_followups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE client_reviews   ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "auth_all" ON client_followups FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "auth_all" ON client_reviews   FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+```
+
+---
+
 ## Step 7 — Advance field in payments (run after Step 6)
 
 ```sql
