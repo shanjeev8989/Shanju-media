@@ -1848,15 +1848,16 @@ async function deleteReview(id) {
 
 // ---- 17. PERFORMANCE TRACKING (owner only) ----
 
+// Scoring: each reel = 30pts total (15 sent for caption + 15 exported)
+// Max 3 reels = 90pts + 10pts daily update = 100 max
 function calcDayScore(name, dayStr) {
-  const mLow = name.trim().toLowerCase();
+  const mLow    = name.trim().toLowerCase();
   const exported = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Exported' && expDate(t).startsWith(dayStr)).length
                  + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Exported' && expDate(p).startsWith(dayStr)).length;
   const caption  = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Sent for Caption' && expDate(t).startsWith(dayStr)).length
                  + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Sent for Caption' && expDate(p).startsWith(dayStr)).length;
   const duDone   = dailyUpdates.some(d => d.member_name === name && d.update_date === dayStr && d.morning_done);
-  const overdue  = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status !== 'Exported' && !t.done && t.deadline && t.deadline < dayStr).length;
-  return Math.max(0, Math.min(100, (exported * 10) + (caption * 5) + (exported * 5) + (duDone ? 10 : 0) - (overdue * 10)));
+  return Math.min(100, (caption * 15) + (exported * 15) + (duDone ? 10 : 0));
 }
 
 function getMemberStats(name) {
@@ -1990,18 +1991,22 @@ function renderPerformance() {
       <div class="card-body" style="padding:14px 16px;">
         <div style="display:flex;flex-wrap:wrap;gap:24px;">
           <div>
-            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">Earning Points</div>
-            <div style="display:flex;flex-direction:column;gap:5px;">
-              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--success);">+15</span> per task Exported</div>
-              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--p700);">+5</span> per task Sent for Caption</div>
-              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--p700);">+10</span> Daily Update submitted</div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">Per Reel (30 pts total)</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--warning);">+15</span> Sent for Caption <span style="font-size:11px;color:var(--muted);">(half)</span></div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--success);">+15</span> Exported <span style="font-size:11px;color:var(--muted);">(remaining half)</span></div>
+              <div style="margin-top:4px;padding:8px 10px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--muted);">
+                3 reels × 30 pts = <strong style="color:var(--p700);">90 pts</strong>
+              </div>
             </div>
           </div>
           <div>
-            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">Losing Points</div>
-            <div style="display:flex;flex-direction:column;gap:5px;">
-              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--danger);">−10</span> per overdue task</div>
-              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--muted);">0</span> min · 100 max (capped)</div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">Daily Update</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--p700);">+10</span> Morning plan submitted</div>
+              <div style="margin-top:4px;padding:8px 10px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--muted);">
+                90 + 10 = <strong style="color:var(--success);">100 pts max</strong>
+              </div>
             </div>
           </div>
           <div>
