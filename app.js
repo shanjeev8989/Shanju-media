@@ -1683,86 +1683,76 @@ function renderClientFollowup() {
 }
 
 function renderFollowupDash() {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const in3   = new Date(today); in3.setDate(in3.getDate() + 3);
-  const now   = new Date();
-  const lastMonthPfx = `${new Date(now.getFullYear(), now.getMonth()-1, 1).getFullYear()}-${String(new Date(now.getFullYear(), now.getMonth()-1, 1).getMonth()+1).padStart(2,'0')}`;
-
+  const today    = new Date(); today.setHours(0,0,0,0);
   const todayStr = today.toISOString().split('T')[0];
 
-  // Manual follow-ups due today
-  const manualToday = clientFollowups.filter(f => f.manual_date === todayStr);
+  if (!clientFollowups.length) {
+    document.getElementById('followup-dash-body').innerHTML =
+      `<div class="empty-state">No clients yet. <span style="color:var(--p700);cursor:pointer;" onclick="nav('client-followup',null)">Add clients →</span></div>`;
+    return;
+  }
 
-  // Auto 6-day upcoming (next 3 days) — skip clients that have a manual date set
-  const upcoming = clientFollowups
-    .filter(f => !f.manual_date)
-    .map(f => ({ ...f, next: getNextReminder(f.shoot_date) }))
-    .filter(f => f.next && f.next <= in3)
-    .sort((a, b) => a.next - b.next);
+  // Build a map of latest review per followup
+  const lastReview = {};
+  clientReviews.forEach(r => {
+    if (r.followup_id && !lastReview[r.followup_id]) lastReview[r.followup_id] = r;
+  });
 
-  const negLastMonth = clientReviews.filter(r => r.sentiment === 'negative' && (r.review_date || '').startsWith(lastMonthPfx));
-  const recent = clientReviews.slice(0, 4);
+  // Annotate each client with their next due date
+  const clients = clientFollowups.map(f => {
+    let nextDate = null, nextLabel = '', isManual = false;
+    if (f.manual_date) {
+      nextDate  = new Date(f.manual_date + 'T00:00:00');
+      nextLabel = f.manual_note || 'Manual follow-up';
+      isManual  = true;
+    } else {
+      nextDate  = getNextReminder(f.shoot_date);
+      nextLabel = nextDate ? 'Auto checkup' : '—';
+    }
+    const daysUntil = nextDate ? Math.round((nextDate - today) / 86400000) : null;
+    return { ...f, nextDate, nextLabel, isManual, daysUntil };
+  }).sort((a, b) => {
+    // Sort: overdue/today first, then by days ascending, then no-date last
+    if (a.daysUntil === null && b.daysUntil === null) return 0;
+    if (a.daysUntil === null) return 1;
+    if (b.daysUntil === null) return -1;
+    return a.daysUntil - b.daysUntil;
+  });
 
-  let html = '';
+  const sentColor = s => s === 'positive' ? 'var(--success)' : s === 'negative' ? 'var(--danger)' : 'var(--muted)';
 
-  // Manual follow-ups today — shown at the very top with high priority
-  if (manualToday.length) {
-    html += `<div style="margin-bottom:14px;"><div style="font-size:11px;font-weight:700;color:var(--warning);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">📌 Manual Follow-Up — Today</div>`;
-    html += manualToday.map(f => `<div class="alert-row" style="border-left:3px solid var(--warning);padding-left:10px;">
-      <div class="adot adot-yellow"></div>
-      <div style="flex:1;">
-        <div style="font-size:13px;font-weight:600;">${f.client_name}</div>
-        <div style="font-size:12px;color:var(--muted);">${f.manual_note || 'Follow up today'} · Shoot: ${fmt(f.shoot_date)}</div>
+  const html = clients.map(f => {
+    const isOverdue = f.daysUntil !== null && f.daysUntil < 0;
+    const isToday   = f.daysUntil === 0;
+    const isSoon    = f.daysUntil !== null && f.daysUntil <= 3 && f.daysUntil > 0;
+
+    let dotClass = 'adot-blue';
+    if (isOverdue || isToday) dotClass = 'adot-yellow';
+    if (f.isManual && (isOverdue || isToday)) dotClass = 'adot-yellow';
+
+    let dueLine = '';
+    if (f.daysUntil === null)   dueLine = '<span style="color:var(--muted);">No date set</span>';
+    else if (isOverdue)         dueLine = `<span style="color:var(--danger);font-weight:600;">${Math.abs(f.daysUntil)}d overdue</span>`;
+    else if (isToday)           dueLine = `<span style="color:var(--warning);font-weight:600;">Due today</span>`;
+    else if (isSoon)            dueLine = `<span style="color:var(--p700);font-weight:600;">in ${f.daysUntil}d</span>`;
+    else                        dueLine = `<span style="color:var(--muted);">in ${f.daysUntil}d</span>`;
+
+    const rev = lastReview[f.id];
+    const revLine = rev
+      ? `<span style="color:${sentColor(rev.sentiment)};font-size:11px;font-weight:600;">${rev.sentiment || 'positive'} · ${fmt(rev.review_date)}</span>`
+      : `<span style="color:var(--muted);font-size:11px;">No review yet</span>`;
+
+    const border = (isOverdue || isToday) ? 'border-left:3px solid var(--warning);padding-left:10px;' : '';
+
+    return `<div class="alert-row" style="${border}">
+      <div class="adot ${dotClass}"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;">${f.client_name} ${f.isManual ? '📌' : ''}</div>
+        <div style="font-size:12px;color:var(--muted);">${f.nextLabel} · ${dueLine} · ${revLine}</div>
       </div>
       <button class="btn btn-sm btn-primary" onclick="openReviewModal('${f.id}','${f.client_name}')">+ Review</button>
-    </div>`).join('');
-    html += '</div>';
-  }
-
-  if (upcoming.length) {
-    html += `<div style="margin-bottom:14px;"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Upcoming Auto Checkups</div>`;
-    html += upcoming.map(f => {
-      const days = Math.round((f.next - today) / 86400000);
-      return `<div class="alert-row">
-        <div class="adot ${days <= 0 ? 'adot-yellow' : 'adot-blue'}"></div>
-        <div style="flex:1;">
-          <div style="font-size:13px;font-weight:600;">${f.client_name}</div>
-          <div style="font-size:12px;color:var(--muted);">${days <= 0 ? 'Due today' : `in ${days}d`} · Shoot: ${fmt(f.shoot_date)}</div>
-        </div>
-        <button class="btn btn-sm btn-primary" onclick="openReviewModal('${f.id}','${f.client_name}')">+ Review</button>
-      </div>`;
-    }).join('');
-    html += '</div>';
-  }
-
-  if (negLastMonth.length) {
-    html += `<div style="margin-bottom:14px;"><div style="font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">⚠ Negative Reviews — Last Month</div>`;
-    html += negLastMonth.map(r => `<div class="alert-row">
-      <div class="adot adot-red"></div>
-      <div style="flex:1;">
-        <div style="font-size:13px;font-weight:600;">${r.client_name}</div>
-        <div style="font-size:12px;color:var(--muted);">${r.review_text || '—'} · ${fmt(r.review_date)}</div>
-      </div>
-    </div>`).join('');
-    html += '</div>';
-  }
-
-  if (recent.length) {
-    const sentColor = s => s === 'positive' ? 'var(--success)' : s === 'negative' ? 'var(--danger)' : 'var(--muted)';
-    html += `<div><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Recent Reviews</div>`;
-    html += recent.map(r => `<div class="alert-row">
-      <div class="adot" style="background:${sentColor(r.sentiment)};width:8px;height:8px;border-radius:50%;flex-shrink:0;"></div>
-      <div style="flex:1;">
-        <div style="font-size:13px;font-weight:600;">${r.client_name} <span style="font-size:11px;color:${sentColor(r.sentiment)};font-weight:600;">${r.sentiment || 'positive'}</span></div>
-        <div style="font-size:12px;color:var(--muted);">${r.review_text || '—'} · ${fmt(r.review_date)}</div>
-      </div>
-    </div>`).join('');
-    html += '</div>';
-  }
-
-  if (!manualToday.length && !upcoming.length && !negLastMonth.length && !recent.length) {
-    html = `<div class="empty-state">No follow-ups yet. <span style="color:var(--p700);cursor:pointer;" onclick="nav('client-followup',null)">Add clients →</span></div>`;
-  }
+    </div>`;
+  }).join('');
 
   document.getElementById('followup-dash-body').innerHTML = html;
 }
