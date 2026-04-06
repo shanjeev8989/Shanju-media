@@ -1,3 +1,11 @@
+## Step 7 — Advance field in payments (run after Step 6)
+
+```sql
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS advance numeric DEFAULT 0;
+```
+
+---
+
 ## Step 6 — Daily tracking + Caption workflow (run after Step 5)
 
 ```sql

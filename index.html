@@ -15,6 +15,10 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Mobile hamburger + backdrop -->
+<button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
 <!-- =====================================================
      PENDING APPROVAL SCREEN
      ===================================================== -->
@@ -78,7 +82,7 @@
 <div class="shell" id="app-shell" style="display:none;">
 
   <!-- SIDEBAR (left navigation) -->
-  <div class="sidebar">
+  <div class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="name">Shanju Media</div>
       <div class="sub">Ops &amp; Team Hub</div>
@@ -484,7 +488,7 @@
         <div class="card-header"><span class="card-title">All Payments</span></div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Client</th><th>Amount</th><th>Type</th><th>Status</th><th>Due Date</th><th>Notes</th><th></th></tr></thead>
+            <thead><tr><th>Client</th><th>Total</th><th>Advance</th><th>Remaining</th><th>Type</th><th>Status</th><th>Due Date</th><th>Notes</th><th></th></tr></thead>
             <tbody id="pay-body"></tbody>
           </table>
         </div>
@@ -655,7 +659,8 @@
     <div class="modal-title">💰 Add Payment Record</div>
     <div class="form-grid">
       <div class="fg"><label>Client</label><input id="pay-client" placeholder="e.g. Ramraj"></div>
-      <div class="fg"><label>Amount (₹)</label><input type="number" id="pay-amount" placeholder="50000"></div>
+      <div class="fg"><label>Total Amount (₹)</label><input type="number" id="pay-amount" placeholder="50000"></div>
+      <div class="fg"><label>Advance Received (₹)</label><input type="number" id="pay-advance" placeholder="0" value="0"></div>
       <div class="fg"><label>Type</label>
         <select id="pay-type"><option>Full Payment</option><option>Advance</option><option>Partial</option><option>Balance Due</option></select>
       </div>

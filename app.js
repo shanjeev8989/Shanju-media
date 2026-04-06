@@ -174,6 +174,7 @@ function nav(id, el) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
   if (el) el.classList.add('active');
+  closeSidebar();
   renderPage(id);
 }
 
@@ -194,6 +195,15 @@ function renderPage(id) {
 function switchUser() {
   currentUser = document.getElementById('current-user').value;
   renderPage(document.querySelector('.page.active')?.id.replace('page-', ''));
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-backdrop').classList.toggle('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-backdrop').classList.remove('open');
 }
 
 
@@ -448,6 +458,7 @@ function renderDash() {
   const dueToday  = myActive.filter(t => daysDiff(t.deadline) === 0);
   const review    = myActive.filter(t => t.status === 'Sent for Caption');
   const pendingPay = payments.filter(p => p.status === 'Pending' || p.status === 'Partially Paid');
+  const pendingAmt = pendingPay.reduce((s, p) => s + Math.max(0, Number(p.amount) - Number(p.advance || 0)), 0);
 
   let m = '';
   if (isOwner) {
@@ -455,7 +466,7 @@ function renderDash() {
     <div class="mcard danger"><div class="mcard-label">Overdue</div><div class="mcard-val">${allActive.filter(t => daysDiff(t.deadline) < 0).length}</div></div>
     <div class="mcard warning"><div class="mcard-label">Due Today</div><div class="mcard-val">${allActive.filter(t => daysDiff(t.deadline) === 0).length}</div></div>
     <div class="mcard info"><div class="mcard-label">Sent for Caption</div><div class="mcard-val">${allActive.filter(t => t.status === 'Sent for Caption').length}</div></div>
-    <div class="mcard danger"><div class="mcard-label">Pending Payments</div><div class="mcard-val">${pendingPay.length}</div><div class="mcard-sub">${fmtMoney(pendingPay.reduce((s, p) => s + Number(p.amount), 0))}</div></div>
+    <div class="mcard danger"><div class="mcard-label">Pending Payments</div><div class="mcard-val">${pendingPay.length}</div><div class="mcard-sub">${fmtMoney(pendingAmt)}</div></div>
     <div class="mcard success"><div class="mcard-label">Clients</div><div class="mcard-val">${[...new Set(tasks.map(t => t.client))].length}</div></div>`;
   } else if (role === 'manager') {
     // For manager: Active Tasks excludes caption queue items (those are a separate workflow)
@@ -1285,12 +1296,14 @@ function updatePayNotif() {
 function renderPayments() {
   const pending  = payments.filter(p => p.status === 'Pending' || p.status === 'Partially Paid');
   const advances = payments.filter(p => p.status === 'Advance Received');
-  const totalPending   = pending.reduce((s, p) => s + Number(p.amount), 0);
+  // Pending = total amount minus any advance already received
+  const totalPending   = pending.reduce((s, p) => s + Math.max(0, Number(p.amount) - Number(p.advance || 0)), 0);
+  const totalAdvances  = payments.reduce((s, p) => s + Number(p.advance || 0), 0);
   const totalCollected = payments.filter(p => p.status === 'Paid').reduce((s, p) => s + Number(p.amount), 0);
 
   document.getElementById('pay-metrics').innerHTML = `
-    <div class="mcard danger"><div class="mcard-label">Pending Amount</div><div class="mcard-val">${fmtMoney(totalPending)}</div><div class="mcard-sub">${pending.length} clients</div></div>
-    <div class="mcard info"><div class="mcard-label">Advances Received</div><div class="mcard-val">${advances.length}</div><div class="mcard-sub">${fmtMoney(advances.reduce((s, p) => s + Number(p.amount), 0))}</div></div>
+    <div class="mcard danger"><div class="mcard-label">Pending (Balance Due)</div><div class="mcard-val">${fmtMoney(totalPending)}</div><div class="mcard-sub">${pending.length} clients</div></div>
+    <div class="mcard info"><div class="mcard-label">Advances Received</div><div class="mcard-val">${fmtMoney(totalAdvances)}</div><div class="mcard-sub">${advances.length + pending.filter(p => p.advance > 0).length} payments</div></div>
     <div class="mcard success"><div class="mcard-label">Total Collected</div><div class="mcard-val">${fmtMoney(totalCollected)}</div></div>
     <div class="mcard purple"><div class="mcard-label">Total Invoiced</div><div class="mcard-val">${fmtMoney(payments.reduce((s, p) => s + Number(p.amount), 0))}</div></div>`;
 
@@ -1300,11 +1313,18 @@ function renderPayments() {
   };
 
   document.getElementById('pay-pending-list').innerHTML = pending.length
-    ? pending.map(p => `
+    ? pending.map(p => {
+        const adv = Number(p.advance || 0);
+        const bal = Math.max(0, Number(p.amount) - adv);
+        return `
         <div class="alert-row"><div class="adot adot-red"></div>
         <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${p.client}</div>
         <div style="font-size:12px;color:var(--muted);">${p.project || ''} · Due ${fmt(p.due_date)}</div>
-        <div style="font-size:12px;margin-top:2px;">${fmtMoney(p.amount)} · ${payBadge(p.status)}</div></div></div>`).join('')
+        <div style="font-size:12px;margin-top:2px;">
+          Total: ${fmtMoney(p.amount)}${adv ? ` · Advance: <span style="color:var(--success);">${fmtMoney(adv)}</span> · Balance: <span style="color:var(--danger);font-weight:600;">${fmtMoney(bal)}</span>` : ''}
+          · ${payBadge(p.status)}
+        </div></div></div>`;
+      }).join('')
     : '<div class="empty-state">No pending payments 🎉</div>';
 
   document.getElementById('pay-advance-list').innerHTML = advances.length
@@ -1315,15 +1335,21 @@ function renderPayments() {
         <div style="font-size:12px;">${fmtMoney(p.amount)} advance received</div></div></div>`).join('')
     : '<div class="empty-state">No advance records.</div>';
 
-  document.getElementById('pay-body').innerHTML = payments.map(p => `<tr>
+  document.getElementById('pay-body').innerHTML = payments.map(p => {
+    const adv       = Number(p.advance) || 0;
+    const remaining = Number(p.amount) - adv;
+    return `<tr>
     <td style="font-weight:600;">${p.client}</td>
     <td style="font-weight:700;color:var(--p700);">${fmtMoney(p.amount)}</td>
+    <td style="color:var(--success);font-weight:600;">${adv ? fmtMoney(adv) : '—'}</td>
+    <td style="color:${remaining > 0 ? 'var(--danger)' : 'var(--muted)'};font-weight:${remaining > 0 ? '600' : '400'};">${adv ? fmtMoney(remaining) : '—'}</td>
     <td><span style="font-size:11px;color:var(--muted);">${p.type || ''}</span></td>
     <td>${payBadge(p.status)}</td>
     <td>${fmt(p.due_date)}</td>
     <td style="font-size:12px;color:var(--muted);">${p.notes || ''}</td>
     <td><button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')">✕</button></td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
   updatePayNotif();
 }
 
@@ -1481,6 +1507,7 @@ async function savePayment() {
   const row = {
     client,
     amount:   Number(amount),
+    advance:  Number(document.getElementById('pay-advance').value) || 0,
     type:     document.getElementById('pay-type').value,
     status:   document.getElementById('pay-status').value,
     due_date: document.getElementById('pay-due').value || null,
@@ -1511,9 +1538,15 @@ async function saveInvoice() {
 
 
 // ---- 17. REALTIME + INIT ----
+let _realtimeTimer = null;
 function setupRealtime() {
   sb.channel('db-changes')
-    .on('postgres_changes', { event: '*', schema: 'public' }, () => { loadAll(); })
+    .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+      // Debounce: only reload once, 2s after the last remote change
+      // This prevents stacking reloads when you make multiple saves quickly
+      clearTimeout(_realtimeTimer);
+      _realtimeTimer = setTimeout(() => { loadAll(); }, 2000);
+    })
     .subscribe();
 }
 
