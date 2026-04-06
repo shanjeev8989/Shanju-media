@@ -124,8 +124,9 @@
     <div class="nav-item" data-section="planning" onclick="nav('post-cal',this)"> <span class="nav-icon">📅</span> Post Calendar</div>
     <div class="nav-item" data-section="planning" onclick="nav('pipeline',this)"> <span class="nav-icon">🚀</span> Post Pipeline</div>
 
-    <div class="nav-section" data-section="founder">Clients</div>
+    <div class="nav-section" data-section="founder">Founder</div>
     <div class="nav-item" data-section="founder" onclick="nav('client-followup',this)"><span class="nav-icon">🤝</span> Client Follow-Up</div>
+    <div class="nav-item" data-section="founder" onclick="nav('performance',this)"><span class="nav-icon">🏆</span> Performance</div>
 
     <div class="nav-section" data-section="finance">Finance</div>
     <div class="nav-item" data-section="finance" onclick="nav('payments',this)">
@@ -569,6 +570,20 @@
           </table>
         </div>
       </div>
+    </div>
+
+    <!-- =====================================================
+         PERFORMANCE PAGE (founder only)
+         ===================================================== -->
+    <div class="page" id="page-performance">
+      <div class="topbar">
+        <div>
+          <div class="page-title">🏆 Performance Tracking</div>
+          <div class="page-sub">Live scores, flags &amp; improvement tracking</div>
+        </div>
+        <button class="btn btn-sm" onclick="renderPerformance()">↻ Refresh</button>
+      </div>
+      <div id="performance-body"><div class="loading"><div class="spinner"></div>Loading...</div></div>
     </div>
 
     <!-- =====================================================

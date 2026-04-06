@@ -210,7 +210,7 @@ async function dbDelete(table, id) {
 function nav(id, el) {
   const role = currentProfile?.role;
   // Finance + founder pages: owner only
-  if ((id === 'payments' || id === 'invoices' || id === 'client-followup') && role !== 'owner') {
+  if ((id === 'payments' || id === 'invoices' || id === 'client-followup' || id === 'performance') && role !== 'owner') {
     toast('Access restricted — visible to Owner only.');
     return;
   }
@@ -243,6 +243,7 @@ function renderPage(id) {
   else if (id === 'client-followup') renderClientFollowup();
   else if (id === 'daily-update')    renderDailyUpdate();
   else if (id === 'team-daily')      renderTeamDaily();
+  else if (id === 'performance')     renderPerformance();
 }
 
 function switchUser() {
@@ -264,6 +265,8 @@ function closeSidebar() {
 function daysDiff(d) { if (!d) return 9999; const t = new Date(d); t.setHours(0,0,0,0); return Math.round((t - TODAY) / 86400000); }
 function fmt(d)      { if (!d) return '—'; return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); }
 function fmtMoney(n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); }
+function expDate(item) { return item.status_updated_at || item.created_at || ''; }
+function arrAvg(arr)   { return arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : 0; }
 
 function avBadge(n) {
   if (!n || n === '—') return '—';
@@ -1042,7 +1045,6 @@ function renderTeam() {
   const todayStr = now.toISOString().split('T')[0];
   const monthLabel = now.toLocaleDateString('en-IN', { month: 'long' });
 
-  const expDate = t => (t.status_updated_at || t.created_at || '');
   const teamMonthExp = tasks.filter(t => t.status === 'Exported' && expDate(t).startsWith(monthPfx)).length
     + posts.filter(p => p.caption_status === 'Exported' && expDate(p).startsWith(monthPfx)).length;
   const teamMonthCap = tasks.filter(t => (t.status === 'Sent for Caption' || t.status === 'Exported') && expDate(t).startsWith(monthPfx)).length;
@@ -1844,7 +1846,233 @@ async function deleteReview(id) {
 }
 
 
-// ---- 17. DAILY UPDATE ----
+// ---- 17. PERFORMANCE TRACKING (owner only) ----
+
+function calcDayScore(name, dayStr) {
+  const mLow = name.trim().toLowerCase();
+  const exported = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Exported' && expDate(t).startsWith(dayStr)).length
+                 + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Exported' && expDate(p).startsWith(dayStr)).length;
+  const caption  = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Sent for Caption' && expDate(t).startsWith(dayStr)).length
+                 + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Sent for Caption' && expDate(p).startsWith(dayStr)).length;
+  const duDone   = dailyUpdates.some(d => d.member_name === name && d.update_date === dayStr && d.morning_done);
+  const overdue  = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status !== 'Exported' && !t.done && t.deadline && t.deadline < dayStr).length;
+  return Math.max(0, Math.min(100, (exported * 10) + (caption * 5) + (exported * 5) + (duDone ? 10 : 0) - (overdue * 10)));
+}
+
+function getMemberStats(name) {
+  const now       = new Date();
+  const todayStr  = now.toISOString().split('T')[0];
+  const monthPfx  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const lmDate    = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  const lastMPfx  = `${lmDate.getFullYear()}-${String(lmDate.getMonth()+1).padStart(2,'0')}`;
+  const mLow      = name.trim().toLowerCase();
+
+  // Build 30-day score array
+  const days = Array.from({length:30}, (_,i) => {
+    const d = new Date(Date.now() - i * 86400000);
+    return d.toISOString().split('T')[0];
+  });
+  const scores = days.map(d => ({ date: d, score: calcDayScore(name, d) }));
+
+  const todayScore   = scores[0].score;
+  const weekScore    = Math.round(arrAvg(scores.slice(0,7).map(s=>s.score)));
+  const lastWeekScore= Math.round(arrAvg(scores.slice(7,14).map(s=>s.score)));
+  const monthScores  = scores.filter(s => s.date.startsWith(monthPfx));
+  const lastMScores  = scores.filter(s => s.date.startsWith(lastMPfx));
+  const monthScore   = Math.round(arrAvg(monthScores.map(s=>s.score)));
+  const lastMScore   = Math.round(arrAvg(lastMScores.map(s=>s.score)));
+
+  const weekImprove  = lastWeekScore ? Math.round(((weekScore - lastWeekScore) / lastWeekScore) * 100) : null;
+  const monthImprove = lastMScore    ? Math.round(((monthScore - lastMScore)   / lastMScore)    * 100) : null;
+
+  const todayExported = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Exported' && expDate(t).startsWith(todayStr)).length
+                      + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Exported' && expDate(p).startsWith(todayStr)).length;
+  const monthExported = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Exported' && expDate(t).startsWith(monthPfx)).length
+                      + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Exported' && expDate(p).startsWith(monthPfx)).length;
+  const overdue  = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status !== 'Exported' && !t.done && t.deadline && t.deadline < todayStr).length;
+  const active   = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status !== 'Exported' && !t.done).length;
+  const duToday  = dailyUpdates.some(d => d.member_name === name && d.update_date === todayStr && d.morning_done);
+
+  // Flags
+  const flags = [];
+  if (!duToday) flags.push({ label:'No Update', type:'warning' });
+  const noExpLast2 = [0,1].every(i => {
+    const d = days[i];
+    return tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Exported' && expDate(t).startsWith(d)).length
+         + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Exported' && expDate(p).startsWith(d)).length === 0;
+  });
+  if (noExpLast2) flags.push({ label:'Low Output', type:'danger' });
+  if (overdue > 2) flags.push({ label:'At Risk', type:'danger' });
+  if (weekImprove !== null && weekImprove < 0) flags.push({ label:'Declining', type:'warning' });
+
+  const label      = todayScore >= 90 ? 'Elite' : todayScore >= 75 ? 'Good' : todayScore >= 60 ? 'Average' : 'Poor';
+  const labelColor = todayScore >= 90 ? 'var(--success)' : todayScore >= 75 ? 'var(--p700)' : todayScore >= 60 ? 'var(--warning)' : 'var(--danger)';
+  const scoreColor = s => s >= 90 ? 'var(--success)' : s >= 75 ? 'var(--p700)' : s >= 60 ? 'var(--warning)' : 'var(--danger)';
+
+  return { name, todayScore, weekScore, lastWeekScore, monthScore, weekImprove, monthImprove,
+    todayExported, monthExported, overdue, active, duToday, flags, label, labelColor, scoreColor,
+    last7: scores.slice(0,7).reverse() };
+}
+
+function renderPerformance() {
+  const members = teamProfiles.filter(p => p.role !== 'owner').map(p => p.name);
+  if (!members.length) {
+    document.getElementById('performance-body').innerHTML = '<div class="empty-state">No team members yet.</div>';
+    return;
+  }
+
+  const all = members.map(getMemberStats);
+
+  function impBadge(pct) {
+    if (pct === null) return '<span style="color:var(--muted);">—</span>';
+    const col = pct >= 0 ? 'var(--success)' : 'var(--danger)';
+    return `<span style="color:${col};font-weight:700;">${pct >= 0 ? '↑' : '↓'} ${Math.abs(pct)}%</span>`;
+  }
+  function flagBadges(flags) {
+    return flags.map(f => `<span class="pill ${f.type==='danger'?'pill-danger':'pill-warning'}" style="font-size:10px;">${f.label}</span>`).join(' ');
+  }
+  function scoreBar(score, sc) {
+    return `<div style="display:flex;align-items:center;gap:6px;">
+      <div style="flex:1;height:6px;background:var(--border);border-radius:3px;">
+        <div style="width:${score}%;height:6px;background:${sc(score)};border-radius:3px;"></div>
+      </div>
+      <span style="font-size:12px;font-weight:700;color:${sc(score)};min-width:24px;">${score}</span>
+    </div>`;
+  }
+
+  // Score cards
+  const cards = all.map(s => `
+    <div class="card" style="flex:1;min-width:190px;cursor:pointer;" onclick="showPerfDetail('${s.name}')">
+      <div class="card-body" style="padding:14px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+          <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;background:${memberBg(s.name)};color:${memberFg(s.name)};">${memberEmoji(s.name)}</div>
+          <div>
+            <div style="font-weight:700;font-size:14px;">${s.name}</div>
+            <div style="font-size:11px;color:${s.labelColor};font-weight:700;">${s.label}</div>
+          </div>
+          ${s.flags.length ? `<div style="margin-left:auto;">${flagBadges(s.flags)}</div>` : ''}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+          <div style="text-align:center;background:var(--bg);border-radius:6px;padding:8px 4px;">
+            <div style="font-size:20px;font-weight:800;color:${s.scoreColor(s.todayScore)};">${s.todayScore}</div>
+            <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;">Today</div>
+          </div>
+          <div style="text-align:center;background:var(--bg);border-radius:6px;padding:8px 4px;">
+            <div style="font-size:20px;font-weight:800;color:${s.scoreColor(s.weekScore)};">${s.weekScore}</div>
+            <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;">Week</div>
+          </div>
+          <div style="text-align:center;background:var(--bg);border-radius:6px;padding:8px 4px;">
+            <div style="font-size:20px;font-weight:800;color:${s.scoreColor(s.monthScore)};">${s.monthScore}</div>
+            <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;">Month</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);">
+          <span>Week ${impBadge(s.weekImprove)}</span>
+          <span>${s.todayExported} exported today</span>
+        </div>
+      </div>
+    </div>`).join('');
+
+  // Table
+  const tableRows = all.map(s => `<tr onclick="showPerfDetail('${s.name}')" style="cursor:pointer;">
+    <td style="font-weight:600;">${memberEmoji(s.name)} ${s.name}</td>
+    <td><span style="font-size:18px;font-weight:800;color:${s.scoreColor(s.todayScore)};">${s.todayScore}</span></td>
+    <td><span style="font-size:18px;font-weight:800;color:${s.scoreColor(s.weekScore)};">${s.weekScore}</span></td>
+    <td><span style="font-size:18px;font-weight:800;color:${s.scoreColor(s.monthScore)};">${s.monthScore}</span></td>
+    <td>${impBadge(s.weekImprove)}</td>
+    <td style="font-weight:700;font-size:15px;">${s.monthExported}</td>
+    <td><span style="color:${s.labelColor};font-weight:700;">${s.label}</span>${s.flags.length ? ' ' + flagBadges(s.flags) : ''}</td>
+  </tr>`).join('');
+
+  document.getElementById('performance-body').innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:20px;">${cards}</div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><span class="card-title">📊 Performance Table</span></div>
+      <div class="card-body" style="padding:0;overflow-x:auto;">
+        <table class="tbl">
+          <thead><tr>
+            <th>Member</th><th>Today</th><th>Week Avg</th><th>Month Avg</th><th>Improvement</th><th>Exported (Month)</th><th>Status</th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+    </div>
+    <div id="perf-detail-card" style="display:none;"></div>`;
+}
+
+function showPerfDetail(name) {
+  const s = getMemberStats(name);
+
+  function scoreBar(score) {
+    return `<div style="display:flex;align-items:center;gap:8px;">
+      <div style="flex:1;height:8px;background:var(--border);border-radius:4px;">
+        <div style="width:${score}%;height:8px;background:${s.scoreColor(score)};border-radius:4px;"></div>
+      </div>
+      <span style="font-size:13px;font-weight:800;color:${s.scoreColor(score)};min-width:28px;">${score}</span>
+    </div>`;
+  }
+
+  const barH = 56;
+  const miniChart = `<div style="display:flex;align-items:flex-end;gap:3px;height:${barH}px;">
+    ${s.last7.map(d => {
+      const h = Math.max(3, Math.round((d.score / 100) * barH));
+      const dayName = new Date(d.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday:'short' });
+      const isToday = d.date === new Date().toISOString().split('T')[0];
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <div style="font-size:9px;font-weight:${isToday?'700':'400'};color:${isToday?'var(--p700)':'var(--muted)'};">${d.score}</div>
+        <div style="width:100%;height:${h}px;background:${s.scoreColor(d.score)};border-radius:3px 3px 0 0;" title="${d.score}"></div>
+        <div style="font-size:9px;color:var(--muted);">${dayName}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+
+  const card = document.getElementById('perf-detail-card');
+  card.style.display = 'block';
+  card.innerHTML = `<div class="card">
+    <div class="card-header">
+      <span class="card-title">${memberEmoji(name)} ${name} — Detail</span>
+      <button class="btn btn-sm" onclick="document.getElementById('perf-detail-card').style.display='none'">✕</button>
+    </div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px;">Score Breakdown</div>
+          <div style="margin-bottom:10px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Today</div>${scoreBar(s.todayScore)}</div>
+          <div style="margin-bottom:10px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">This Week (avg)</div>${scoreBar(s.weekScore)}</div>
+          <div style="margin-bottom:10px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">This Month (avg)</div>${scoreBar(s.monthScore)}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:16px;">
+            <div style="text-align:center;background:var(--bg);border-radius:8px;padding:10px;">
+              <div style="font-size:18px;font-weight:800;">${s.active}</div>
+              <div style="font-size:10px;color:var(--muted);">Active</div>
+            </div>
+            <div style="text-align:center;background:var(--bg);border-radius:8px;padding:10px;">
+              <div style="font-size:18px;font-weight:800;color:var(--success);">${s.monthExported}</div>
+              <div style="font-size:10px;color:var(--muted);">Exported</div>
+            </div>
+            <div style="text-align:center;background:var(--bg);border-radius:8px;padding:10px;">
+              <div style="font-size:18px;font-weight:800;${s.overdue?'color:var(--danger)':''}">${s.overdue}</div>
+              <div style="font-size:10px;color:var(--muted);">Overdue</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px;">Last 7 Days</div>
+          ${miniChart}
+          <div style="margin-top:14px;">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Daily update today: <strong>${s.duToday?'✅ Submitted':'❌ Not submitted'}</strong></div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Week vs last week: <strong>${s.weekImprove!==null?(s.weekImprove>=0?'+':'')+s.weekImprove+'%':'—'}</strong></div>
+            <div style="font-size:12px;color:var(--muted);">Month improvement: <strong>${s.monthImprove!==null?(s.monthImprove>=0?'+':'')+s.monthImprove+'%':'—'}</strong></div>
+          </div>
+          ${s.flags.length ? `<div style="margin-top:14px;"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Flags</div><div style="display:flex;flex-wrap:wrap;gap:6px;">${s.flags.map(f=>`<span class="pill ${f.type==='danger'?'pill-danger':'pill-warning'}">${f.label}</span>`).join('')}</div></div>` : `<div style="margin-top:14px;"><span class="pill pill-success">No issues ✓</span></div>`}
+        </div>
+      </div>
+    </div>
+  </div>`;
+  card.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+
+// ---- 18. DAILY UPDATE ----
 
 function renderDailyUpdate() {
   const todayStr  = new Date().toISOString().split('T')[0];
