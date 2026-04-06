@@ -315,15 +315,23 @@ function ddPill(d) {
 //   manager → everything EXCEPT Finance (no payments/invoices, no money metrics)
 //   editor  → My Tasks only (+ limited Kanban)
 
+let _appBooted = false;
 async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
+    _appBooted = true;
     await loadProfile(session.user);
   }
   // Listen for future sign-in / sign-out events
+  // Supabase v2 fires SIGNED_IN immediately on registration if already logged in —
+  // skip it if we already handled the session above (prevents double loadProfile call)
   sb.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN')  await loadProfile(session.user);
-    if (event === 'SIGNED_OUT') showLoginScreen();
+    if (event === 'SIGNED_IN') {
+      if (_appBooted) return;
+      _appBooted = true;
+      await loadProfile(session.user);
+    }
+    if (event === 'SIGNED_OUT') { _appBooted = false; showLoginScreen(); }
   });
 }
 
@@ -2905,10 +2913,13 @@ function toggleDailyDetail(safeId) {
 
 
 // ---- 18. REALTIME + INIT ----
-let _realtimeTimer = null;
-let _tabWasHidden  = false;
+let _realtimeTimer  = null;
+let _tabWasHidden   = false;
+let _realtimeSetup  = false;
 
 function setupRealtime() {
+  if (_realtimeSetup) return;   // prevent duplicate listeners on re-login
+  _realtimeSetup = true;
   sb.channel('db-changes')
     .on('postgres_changes', { event: '*', schema: 'public' }, () => {
       // Own writes: skip entirely — local state already updated
@@ -2921,12 +2932,16 @@ function setupRealtime() {
     })
     .subscribe();
 
-  // Tab becomes visible: if external changes happened, do one silent reload
+  // Tab becomes visible: close sidebar (defensive), then silently reload if data changed
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && currentProfile && _tabWasHidden) {
-      _tabWasHidden = false;
-      clearTimeout(_realtimeTimer);
-      if (!_loadLock) loadAll(true);
+    if (!document.hidden && currentProfile) {
+      closeSidebar();
+      if (_tabWasHidden) {
+        _tabWasHidden = false;
+        clearTimeout(_realtimeTimer);
+        // 400ms delay — lets the browser fully restore the tab before we hit the network
+        setTimeout(() => { if (!_loadLock) loadAll(true); }, 400);
+      }
     }
   });
 }
