@@ -1984,8 +1984,51 @@ function renderPerformance() {
     <td><span style="color:${s.labelColor};font-weight:700;">${s.label}</span>${s.flags.length ? ' ' + flagBadges(s.flags) : ''}</td>
   </tr>`).join('');
 
+  const howPoints = `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><span class="card-title">💡 How Points Work</span></div>
+      <div class="card-body" style="padding:14px 16px;">
+        <div style="display:flex;flex-wrap:wrap;gap:24px;">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">Earning Points</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--success);">+15</span> per task Exported</div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--p700);">+5</span> per task Sent for Caption</div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--p700);">+10</span> Daily Update submitted</div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">Losing Points</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--danger);">−10</span> per overdue task</div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="display:inline-block;width:36px;text-align:right;font-weight:800;color:var(--muted);">0</span> min · 100 max (capped)</div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">Labels</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+              <div style="font-size:13px;"><span style="color:var(--success);font-weight:700;">Elite</span> &nbsp;— 90–100</div>
+              <div style="font-size:13px;"><span style="color:var(--p700);font-weight:700;">Good</span> &nbsp;&nbsp;— 75–89</div>
+              <div style="font-size:13px;"><span style="color:var(--warning);font-weight:700;">Average</span> — 60–74</div>
+              <div style="font-size:13px;"><span style="color:var(--danger);font-weight:700;">Poor</span> &nbsp;&nbsp;— below 60</div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">Auto Flags</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+              <div style="font-size:13px;"><span class="pill pill-warning" style="font-size:10px;">No Update</span> &nbsp;daily plan not submitted</div>
+              <div style="font-size:13px;"><span class="pill pill-danger"  style="font-size:10px;">Low Output</span> &nbsp;0 exports for 2 days</div>
+              <div style="font-size:13px;"><span class="pill pill-danger"  style="font-size:10px;">At Risk</span> &nbsp;&nbsp;&nbsp;more than 2 overdue</div>
+              <div style="font-size:13px;"><span class="pill pill-warning" style="font-size:10px;">Declining</span> &nbsp;week score below last week</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
   document.getElementById('performance-body').innerHTML = `
     <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:20px;">${cards}</div>
+    ${howPoints}
     <div class="card" style="margin-bottom:16px;">
       <div class="card-header"><span class="card-title">📊 Performance Table</span></div>
       <div class="card-body" style="padding:0;overflow-x:auto;">
