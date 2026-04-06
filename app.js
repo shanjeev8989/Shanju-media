@@ -487,7 +487,7 @@ function renderDash() {
 
   const followupCard = document.getElementById('followup-dash-card');
   if (followupCard) followupCard.style.display = isOwner ? 'block' : 'none';
-  if (isOwner) renderFollowupDash();
+  if (isOwner) { try { renderFollowupDash(); } catch(e) { console.error('renderFollowupDash error:', e); } }
 
   document.getElementById('dash-title').textContent = isOwner ? 'Founder Dashboard' : `${currentUser}'s Dashboard`;
   document.getElementById('dash-sub').textContent   = isOwner ? 'Full company overview' : 'Your personal workspace';
@@ -1587,7 +1587,9 @@ async function saveInvoice() {
 // ---- CLIENT FOLLOW-UP ----
 
 function getNextReminder(shootDate) {
+  if (!shootDate) return null;
   const shoot = new Date(shootDate + 'T00:00:00');
+  if (isNaN(shoot.getTime())) return null;
   const today = new Date(); today.setHours(0,0,0,0);
   for (let n = 1; n <= 365; n++) {
     const d = new Date(shoot);
