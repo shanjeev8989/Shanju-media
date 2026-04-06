@@ -26,18 +26,38 @@
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let tasks = [], shoots = [], posts = [], pipeline = [], payments = [], invoices = [];
+let teamProfiles = []; // all approved profiles — used for editor dropdown
 let currentUser = 'Shanju';
 let currentProfile = null; // { id, name, role }  — set after login
 let shootCalMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let postCalMonth  = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 const TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
 
-// Team colours, roles, emojis — edit these to add/remove team members
+// Video task types — creating one of these auto-adds to the pipeline
+const VIDEO_TYPES = ['Reel','Promo Video','Talking Head Video','Ad Video','Content Video','YouTube Video','Short Video'];
+
+// Content pipeline status flow
+const CONTENT_STATUSES = ['Planned','Script Ready','Shot Pending','Shot Done','Edit Pending','Edit Done','QC Pending','QC Done','Approval Pending','Approved','Caption Ready','Scheduled','Posted'];
+
+// Team colours, roles, emojis — edit these to customise known members
 const PAL     = { Shanju:'#f5f3ff', Bharath:'#dbeafe', Minhaaj:'#d1fae5', Gowtham:'#fef3c7', Bava:'#fce7f3' };
 const PALTEXT = { Shanju:'#6d28d9', Bharath:'#1e40af', Minhaaj:'#065f46', Gowtham:'#92400e', Bava:'#9d174d' };
 const ROLES   = { Shanju:'Founder & CEO', Bharath:'Chief Editor / QC', Minhaaj:'Editor', Gowtham:'Videographer & Editor', Bava:'Post Production Head' };
 const EMOJIS  = { Shanju:'👑', Bharath:'🎬', Minhaaj:'✂️', Gowtham:'📸', Bava:'📦' };
 const INITS   = { Shanju:'SJ', Bharath:'BH', Minhaaj:'MH', Gowtham:'GW', Bava:'BV' };
+
+// Fallback palette for dynamic members not in the hardcoded lists above
+const FALLBACK_BKGS  = ['#ede9fe','#dbeafe','#d1fae5','#fef3c7','#fce7f3','#ffedd5','#e0f2fe'];
+const FALLBACK_FKGS  = ['#6d28d9','#1e40af','#065f46','#92400e','#9d174d','#c2410c','#0369a1'];
+
+function memberBg(name)    { return PAL[name]     || FALLBACK_BKGS[name.charCodeAt(0) % FALLBACK_BKGS.length]; }
+function memberFg(name)    { return PALTEXT[name] || FALLBACK_FKGS[name.charCodeAt(0) % FALLBACK_FKGS.length]; }
+function memberEmoji(name) { return EMOJIS[name]  || '👤'; }
+function memberInits(name) {
+  if (INITS[name]) return INITS[name];
+  const parts = name.trim().split(' ');
+  return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
+}
 
 
 // ---- 2. SYNC STATUS & TOAST ----
@@ -63,10 +83,14 @@ async function loadAll() {
       sb.from('pipeline').select('*'),
       sb.from('payments').select('*').order('created_at', { ascending: false }),
       sb.from('invoices').select('*').order('created_at', { ascending: false }),
+      sb.from('profiles').select('*').eq('status', 'approved'),
     ];
-    const [t, s, p, pl, pay, inv] = await Promise.all(queries);
+    const [t, s, p, pl, pay, inv, prof] = await Promise.all(queries);
     tasks = t.data || []; shoots = s.data || []; posts = p.data || [];
     pipeline = pl.data || []; payments = pay.data || []; invoices = inv.data || [];
+    teamProfiles = prof.data || [];
+    populateEditorDropdown();
+    populateTeamDropdowns();
 
     await loadPendingUsers(); // owner only — no-op for others
 
@@ -79,11 +103,41 @@ async function loadAll() {
   }
 }
 
-async function dbInsert(table, row) {
+function populateEditorDropdown() {
+  const sel = document.getElementById('po-editor');
+  if (!sel) return;
+  const editors = teamProfiles.filter(p => p.role === 'editor');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— Unassigned —</option>' +
+    editors.map(e => `<option value="${e.name}" ${e.name === current ? 'selected' : ''}>${e.name}</option>`).join('');
+}
+
+function populateTeamDropdowns() {
+  const members = teamProfiles.map(p => p.name);
+
+  // Task modal — owner dropdown, default to current user
+  const tOwner = document.getElementById('t-owner');
+  if (tOwner) {
+    tOwner.innerHTML = members.map(n =>
+      `<option value="${n}" ${n === currentUser ? 'selected' : ''}>${n}</option>`
+    ).join('');
+  }
+
+  // All Tasks — owner filter dropdown
+  const atOwner = document.getElementById('at-owner');
+  if (atOwner) {
+    const cur = atOwner.value;
+    atOwner.innerHTML = '<option value="">All team</option>' +
+      members.map(n => `<option value="${n}" ${n === cur ? 'selected' : ''}>${n}</option>`).join('');
+  }
+}
+
+async function dbInsert(table, row, silent = false) {
   setSyncing();
   const { data, error } = await sb.from(table).insert([row]).select();
   if (error) { setSyncError(); toast('Save failed: ' + error.message); return null; }
-  setSynced(); toast('Saved!');
+  setSynced();
+  if (!silent) toast('Saved!');
   return data[0];
 }
 
@@ -104,6 +158,18 @@ async function dbDelete(table, id) {
 
 // ---- 4. NAVIGATION ----
 function nav(id, el) {
+  const role = currentProfile?.role;
+  // Finance pages: owner only
+  if ((id === 'payments' || id === 'invoices') && role !== 'owner') {
+    toast('Access restricted — Finance is visible to Owner only.');
+    return;
+  }
+  // Work pages (All Tasks, Kanban, Team): owner and manager only
+  const workPages = ['all-tasks','kanban','team'];
+  if (workPages.includes(id) && role === 'editor') {
+    toast('Access restricted.');
+    return;
+  }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
@@ -137,14 +203,26 @@ function fmt(d)      { if (!d) return '—'; return new Date(d).toLocaleDateStri
 function fmtMoney(n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); }
 
 function avBadge(n) {
+  if (!n || n === '—') return '—';
   return `<span style="display:inline-flex;align-items:center;gap:5px;">
-    <span style="width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:${PAL[n]||'#ede9fe'};color:${PALTEXT[n]||'#6d28d9'};">${INITS[n] || n[0]}</span>${n}
+    <span style="width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:${memberBg(n)};color:${memberFg(n)};">${memberInits(n)}</span>${n}
   </span>`;
 }
 
 function statusPill(s) {
-  const m = { 'In progress':'pill-info', 'Not started':'pill-neutral', 'Waiting for review':'pill-warning', 'Waiting for input':'pill-warning', 'Changes needed':'pill-warning', 'Approved':'pill-success', 'Delayed':'pill-danger', 'Posted':'pill-success', 'Scheduled':'pill-success' };
-  return `<span class="pill ${m[s] || 'pill-neutral'}">${s}</span>`;
+  const m = {
+    'Active':            'pill-info',
+    'Sent for Caption':  'pill-warning',
+    'Exported':          'pill-success',
+    // legacy mappings so old data still renders
+    'Started':           'pill-info',
+    'Currently Working': 'pill-info',
+    'Not Started':       'pill-neutral',
+    'On Progress':       'pill-info',
+    'Not started':       'pill-neutral',
+    'In progress':       'pill-info',
+  };
+  return `<span class="pill ${m[s] || 'pill-info'}">${s || 'Active'}</span>`;
 }
 
 function priPill(p) {
@@ -165,9 +243,9 @@ function ddPill(d) {
 // ---- 5. AUTH ----
 
 // Role permissions:
-//   owner  (Shanju) → everything including Finance
-//   admin  (Bava)   → everything EXCEPT Finance
-//   editor (others) → Dashboard + My Tasks only
+//   owner   → everything including Finance
+//   manager → everything EXCEPT Finance (no payments/invoices, no money metrics)
+//   editor  → My Tasks only (+ limited Kanban)
 
 async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
@@ -209,11 +287,13 @@ async function loadProfile(user) {
   }
 
   // Hide nav sections based on role
+  // manager + editor: no finance
   if (profile.role !== 'owner') {
     document.querySelectorAll('[data-section="finance"]').forEach(el => el.style.display = 'none');
   }
+  // editor only: no work section (All Tasks, Kanban, Team)
   if (profile.role === 'editor') {
-    document.querySelectorAll('[data-section="work"], [data-section="planning"]').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('[data-section="work"]').forEach(el => el.style.display = 'none');
   }
 
   // Set today's date in all date fields
@@ -348,67 +428,141 @@ function renderDash() {
     approvalCard.style.display = 'none';
   }
 
-  document.getElementById('dash-title').textContent = currentUser === 'Shanju' ? 'Founder Dashboard' : `${currentUser}'s Dashboard`;
-  document.getElementById('dash-sub').textContent   = currentUser === 'Shanju' ? 'Full company overview' : 'Your personal workspace';
-  document.getElementById('focus-title').textContent = currentUser === 'Shanju' ? '🎯 Founder Focus Today' : '🎯 My Focus Today';
+  const role    = currentProfile?.role;
+  const isOwner = role === 'owner';
 
-  const src    = currentUser === 'Shanju' ? tasks : tasks.filter(t => t.owner === currentUser);
-  const active = src.filter(t => t.status !== 'Posted' && !t.done);
-  const overdue   = active.filter(t => daysDiff(t.deadline) < 0);
-  const dueToday  = active.filter(t => daysDiff(t.deadline) === 0);
-  const review    = active.filter(t => t.status === 'Waiting for review');
+  const todoCard = document.getElementById('founder-todo-card');
+  if (todoCard) todoCard.style.display = isOwner ? 'block' : 'none';
+  if (isOwner) renderTodos();
+
+  document.getElementById('dash-title').textContent = isOwner ? 'Founder Dashboard' : `${currentUser}'s Dashboard`;
+  document.getElementById('dash-sub').textContent   = isOwner ? 'Full company overview' : 'Your personal workspace';
+  document.getElementById('focus-title').textContent = isOwner ? '🎯 Founder Focus Today' : '🎯 My Focus Today';
+
+  // Active tasks for current user scope
+  const allActive = tasks.filter(t => t.status !== 'Exported' && !t.done);
+  const cuLower   = currentUser.trim().toLowerCase();
+  const myActive  = allActive.filter(t => t.owner && t.owner.trim().toLowerCase() === cuLower);
+  const myPosts   = posts.filter(p => p.assigned_editor === currentUser);
+  const overdue   = myActive.filter(t => daysDiff(t.deadline) < 0);
+  const dueToday  = myActive.filter(t => daysDiff(t.deadline) === 0);
+  const review    = myActive.filter(t => t.status === 'Sent for Caption');
   const pendingPay = payments.filter(p => p.status === 'Pending' || p.status === 'Partially Paid');
 
   let m = '';
-  if (currentUser === 'Shanju') {
-    const allA = tasks.filter(t => t.status !== 'Posted');
-    m = `<div class="mcard purple"><div class="mcard-label">Active Tasks</div><div class="mcard-val">${allA.length}</div><div class="mcard-sub">All clients</div></div>
-    <div class="mcard danger"><div class="mcard-label">Overdue</div><div class="mcard-val">${allA.filter(t => daysDiff(t.deadline) < 0).length}</div></div>
-    <div class="mcard warning"><div class="mcard-label">Due Today</div><div class="mcard-val">${allA.filter(t => daysDiff(t.deadline) === 0).length}</div></div>
-    <div class="mcard info"><div class="mcard-label">In Review</div><div class="mcard-val">${allA.filter(t => t.status === 'Waiting for review').length}</div></div>
+  if (isOwner) {
+    m = `<div class="mcard purple"><div class="mcard-label">Active Tasks</div><div class="mcard-val">${allActive.length}</div><div class="mcard-sub">All clients</div></div>
+    <div class="mcard danger"><div class="mcard-label">Overdue</div><div class="mcard-val">${allActive.filter(t => daysDiff(t.deadline) < 0).length}</div></div>
+    <div class="mcard warning"><div class="mcard-label">Due Today</div><div class="mcard-val">${allActive.filter(t => daysDiff(t.deadline) === 0).length}</div></div>
+    <div class="mcard info"><div class="mcard-label">Sent for Caption</div><div class="mcard-val">${allActive.filter(t => t.status === 'Sent for Caption').length}</div></div>
     <div class="mcard danger"><div class="mcard-label">Pending Payments</div><div class="mcard-val">${pendingPay.length}</div><div class="mcard-sub">${fmtMoney(pendingPay.reduce((s, p) => s + Number(p.amount), 0))}</div></div>
     <div class="mcard success"><div class="mcard-label">Clients</div><div class="mcard-val">${[...new Set(tasks.map(t => t.client))].length}</div></div>`;
+  } else if (role === 'manager') {
+    // For manager: Active Tasks excludes caption queue items (those are a separate workflow)
+    const mgrActive   = allActive.filter(t => t.status !== 'Sent for Caption');
+    const captionQueue = allActive.filter(t => t.status === 'Sent for Caption').length
+                       + posts.filter(p => p.caption_status === 'Sent for Caption').length;
+    m = `<div class="mcard purple"><div class="mcard-label">Active Tasks</div><div class="mcard-val">${mgrActive.length}</div><div class="mcard-sub">All clients</div></div>
+    <div class="mcard danger"><div class="mcard-label">Overdue</div><div class="mcard-val">${mgrActive.filter(t => daysDiff(t.deadline) < 0).length}</div></div>
+    <div class="mcard warning"><div class="mcard-label">Due Today</div><div class="mcard-val">${mgrActive.filter(t => daysDiff(t.deadline) === 0).length}</div></div>
+    <div class="mcard info" style="${captionQueue ? 'border:2px solid var(--warning);' : ''}"><div class="mcard-label">Caption Queue</div><div class="mcard-val">${captionQueue}</div><div class="mcard-sub">awaiting captions</div></div>
+    <div class="mcard success"><div class="mcard-label">Clients</div><div class="mcard-val">${[...new Set(tasks.map(t => t.client))].length}</div></div>`;
   } else {
-    m = `<div class="mcard purple"><div class="mcard-label">My Tasks</div><div class="mcard-val">${active.length}</div></div>
-    <div class="mcard danger"><div class="mcard-label">Overdue</div><div class="mcard-val">${overdue.length}</div></div>
+    // Editor: my tasks + assigned posts combined
+    const totalAssigned = myActive.length + myPosts.length;
+    const postsOverdue  = myPosts.filter(p => daysDiff(p.date) < 0).length;
+    m = `<div class="mcard purple"><div class="mcard-label">Assigned Tasks</div><div class="mcard-val">${totalAssigned}</div></div>
+    <div class="mcard danger"><div class="mcard-label">Overdue</div><div class="mcard-val">${overdue.length + postsOverdue}</div></div>
     <div class="mcard warning"><div class="mcard-label">Due Today</div><div class="mcard-val">${dueToday.length}</div></div>
-    <div class="mcard info"><div class="mcard-label">In Review</div><div class="mcard-val">${review.length}</div></div>`;
+    <div class="mcard info"><div class="mcard-label">Sent for Caption</div><div class="mcard-val">${review.length}</div></div>`;
   }
   document.getElementById('dash-metrics').innerHTML = m;
 
-  const urgent = (currentUser === 'Shanju' ? tasks : tasks.filter(t => t.owner === currentUser))
-    .filter(t => daysDiff(t.deadline) <= 1 && t.status !== 'Posted').slice(0, 5);
+  // Build combined items (tasks + posts) for urgent/focus sections
+  const dashTaskSrc = isOwner ? allActive : myActive;
+  const dashPostSrc = isOwner ? posts : myPosts;
+
+  // Normalise posts into same shape as tasks for display
+  const dashItems = [
+    ...dashTaskSrc.map(t => ({
+      _kind:    'task',
+      _days:    daysDiff(t.deadline),
+      client:   t.client,
+      name:     t.name,
+      meta:     `${t.owner} · ${t.status}`,
+      next:     t.next_step || '',
+    })),
+    ...dashPostSrc
+      .filter(p => p.assigned_editor)
+      .map(p => ({
+        _kind:  'post',
+        _days:  daysDiff(p.date),
+        client: p.client,
+        name:   p.content_type || 'Post',
+        meta:   `${p.assigned_editor} · ${p.platform || ''} · Caption: ${p.caption_status || '—'}`,
+        next:   p.notes || '',
+      })),
+  ];
+
+  // Immediate Action: overdue + due today + due tomorrow
+  const urgent = dashItems
+    .filter(i => i._days <= 1)
+    .sort((a, b) => a._days - b._days)
+    .slice(0, 8);
   document.getElementById('dash-urgent').innerHTML = urgent.length
-    ? urgent.map(t => {
-        const d = daysDiff(t.deadline);
-        return `<div class="alert-row"><div class="adot ${d < 0 ? 'adot-red' : d === 0 ? 'adot-yellow' : 'adot-blue'}"></div>
-          <div><div style="font-size:13px;font-weight:600;">${t.client} — ${t.name}</div>
-          <div style="font-size:12px;color:var(--muted);">Owner: ${t.owner} · ${t.status}</div>
-          <div style="font-size:12px;color:#7c3aed;margin-top:2px;">→ ${t.next_step || ''}</div></div></div>`;
+    ? urgent.map(i => {
+        const d = i._days;
+        const label = d < 0 ? `Overdue ${Math.abs(d)}d` : d === 0 ? 'Due Today' : 'Due Tomorrow';
+        const dot   = d < 0 ? 'adot-red' : d === 0 ? 'adot-yellow' : 'adot-blue';
+        const tag   = i._kind === 'post' ? ' 📅' : '';
+        return `<div class="alert-row"><div class="adot ${dot}"></div>
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:600;">${i.client} — ${i.name}${tag}</div>
+            <div style="font-size:12px;color:var(--muted);">${i.meta} · <strong>${label}</strong></div>
+            ${i.next ? `<div style="font-size:12px;color:#7c3aed;margin-top:2px;">→ ${i.next}</div>` : ''}
+          </div></div>`;
       }).join('')
     : `<div class="empty-state">No urgent items 🎉</div>`;
 
-  const bn = [];
-  const bQC = tasks.filter(t => t.owner === 'Bharath' && t.status === 'Waiting for review');
-  if (bQC.length) bn.push({ dot: 'adot-red',    text: `Bharath QC backlog — ${bQC.length} tasks waiting.` });
-  const bBava = tasks.filter(t => t.owner === 'Bava' && t.status === 'Not started');
-  if (bBava.length) bn.push({ dot: 'adot-yellow', text: `Bava has ${bBava.length} unstarted tasks.` });
-  if (!bn.length) bn.push({ dot: 'adot-green', text: 'No major bottlenecks. Operations running smoothly.' });
-  document.getElementById('dash-bottlenecks').innerHTML = bn.map(b =>
-    `<div class="alert-row"><div class="adot ${b.dot}"></div><div style="font-size:13px;">${b.text}</div></div>`
-  ).join('');
+  const bottleneckCard = document.getElementById('dash-bottlenecks').closest('.card');
+  const workloadCard   = document.getElementById('dash-workload').closest('.card');
 
-  const focus = currentUser === 'Shanju'
-    ? ['Approve storytelling direction for pending clients.', 'Review completed edits awaiting QC.', 'Chase any pending payments due this week.']
-    : active.filter(t => t.priority === 'High').slice(0, 3).map(t => `Complete: ${t.client} — ${t.name}`);
-  document.getElementById('dash-focus').innerHTML = focus.map(f =>
-    `<div class="alert-row"><div class="adot adot-purple"></div><div style="font-size:13px;">${f}</div></div>`
-  ).join('') || `<div class="empty-state">Nothing specific today.</div>`;
+  if (isOwner) {
+    bottleneckCard.style.display = 'block';
+    const bn = [];
+    const bQC = tasks.filter(t => t.owner === 'Bharath' && t.status === 'Sent for Caption');
+    if (bQC.length) bn.push({ dot: 'adot-red',    text: `Bharath has ${bQC.length} tasks sent for caption.` });
+    const bBava = tasks.filter(t => t.owner === 'Bava' && t.status === 'Not Started');
+    if (bBava.length) bn.push({ dot: 'adot-yellow', text: `Bava has ${bBava.length} unstarted tasks.` });
+    if (!bn.length) bn.push({ dot: 'adot-green', text: 'No major bottlenecks. Operations running smoothly.' });
+    document.getElementById('dash-bottlenecks').innerHTML = bn.map(b =>
+      `<div class="alert-row"><div class="adot ${b.dot}"></div><div style="font-size:13px;">${b.text}</div></div>`
+    ).join('');
+  } else {
+    bottleneckCard.style.display = 'none';
+  }
 
-  if (currentUser === 'Shanju') {
-    const members = ['Shanju', 'Bharath', 'Minhaaj', 'Gowtham', 'Bava'];
+  // My Focus: due in 2–3 days
+  const focus = dashItems
+    .filter(i => i._days >= 2 && i._days < 4)
+    .sort((a, b) => a._days - b._days)
+    .slice(0, 5);
+  document.getElementById('dash-focus').innerHTML = focus.length
+    ? focus.map(i => {
+        const tag = i._kind === 'post' ? ' 📅' : '';
+        return `<div class="alert-row"><div class="adot adot-purple"></div>
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:600;">${i.client} — ${i.name}${tag}</div>
+            <div style="font-size:12px;color:var(--muted);">${i.meta} · due in ${i._days} day${i._days !== 1 ? 's' : ''}</div>
+          </div></div>`;
+      }).join('')
+    : `<div class="empty-state">Nothing coming up in the next 4 days.</div>`;
+
+  if (isOwner) {
+    workloadCard.style.display = 'block';
+    const members = teamProfiles.map(p => p.name);
     document.getElementById('dash-workload').innerHTML = members.map(m => {
-      const mt  = tasks.filter(t => t.owner === m && t.status !== 'Posted');
+      const mt  = tasks.filter(t => t.owner === m && t.status !== 'Exported' && !t.done);
       const ov  = mt.filter(t => daysDiff(t.deadline) < 0).length;
       const pct = Math.min(100, mt.length * 20);
       return `<div style="margin-bottom:10px;">
@@ -417,58 +571,352 @@ function renderDash() {
         <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>`;
     }).join('');
   } else {
-    document.getElementById('dash-workload').innerHTML = '<div style="font-size:13px;color:var(--muted);">Switch to Shanju view for full team workload.</div>';
+    workloadCard.style.display = 'none';
   }
+
+  // ---- Caption Queue (manager + owner) ----
+  const captionQueueCard = document.getElementById('caption-queue-card');
+  const captionReadyCard = document.getElementById('caption-ready-card');
+  if (role !== 'editor') {
+    // Tasks sent for caption (not yet done)
+    const inCaptionTasks = tasks.filter(t => t.status === 'Sent for Caption' && !t.caption_done);
+    // Posts sent for caption
+    const inCaptionPosts = posts.filter(p => p.caption_status === 'Sent for Caption');
+    const total = inCaptionTasks.length + inCaptionPosts.length;
+    if (total) {
+      captionQueueCard.style.display = 'block';
+      document.getElementById('caption-queue-count').textContent = total;
+      document.getElementById('caption-queue-body').innerHTML = [
+        ...inCaptionTasks.map(t => `
+          <div class="alert-row">
+            <div class="adot adot-yellow"></div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:600;">${t.client} — ${t.name}</div>
+              <div style="font-size:12px;color:var(--muted);">Editor: <strong>${t.owner}</strong></div>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="markCaptionDone('${t.id}')">✓ Caption Done</button>
+          </div>`),
+        ...inCaptionPosts.map(p => `
+          <div class="alert-row">
+            <div class="adot adot-yellow"></div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:600;">${p.client} — ${p.content_type || 'Post'} 📅</div>
+              <div style="font-size:12px;color:var(--muted);">Editor: <strong>${p.assigned_editor}</strong> · ${p.platform || ''}</div>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="markPostCaptionDone('${p.id}')">✓ Caption Done</button>
+          </div>`),
+      ].join('');
+    } else {
+      captionQueueCard.style.display = 'none';
+    }
+    captionReadyCard.style.display = 'none';
+  } else {
+    // ---- Caption Ready (editor) ----
+    captionQueueCard.style.display = 'none';
+    const meLow = currentUser.trim().toLowerCase();
+    const readyTasks = tasks.filter(t => t.owner && t.owner.trim().toLowerCase() === meLow && t.caption_done && t.status !== 'Exported');
+    const readyPosts = posts.filter(p => p.assigned_editor && p.assigned_editor.trim().toLowerCase() === meLow && p.caption_status === 'Caption Ready');
+    const totalReady = readyTasks.length + readyPosts.length;
+    if (totalReady) {
+      captionReadyCard.style.display = 'block';
+      document.getElementById('caption-ready-body').innerHTML = [
+        ...readyTasks.map(t => `
+          <div class="alert-row">
+            <div class="adot adot-green"></div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:600;">${t.client} — ${t.name}</div>
+              <div style="font-size:12px;color:var(--muted);">Caption is ready — add it and mark as Exported</div>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="updateTaskStatus('${t.id}','Exported')">Mark Exported</button>
+          </div>`),
+        ...readyPosts.map(p => `
+          <div class="alert-row">
+            <div class="adot adot-green"></div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:600;">${p.client} — ${p.content_type || 'Post'} 📅</div>
+              <div style="font-size:12px;color:var(--muted);">Caption is ready — add it and mark as Exported</div>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="updatePostStatus('${p.id}','Exported')">Mark Exported</button>
+          </div>`),
+      ].join('');
+    } else {
+      captionReadyCard.style.display = 'none';
+    }
+  }
+}
+
+
+// ---- FOUNDER TO-DO LIST ----
+function getTodos() {
+  try { return JSON.parse(localStorage.getItem('founder_todos') || '[]'); } catch { return []; }
+}
+function saveTodos(todos) {
+  localStorage.setItem('founder_todos', JSON.stringify(todos));
+}
+function renderTodos() {
+  const todos = getTodos();
+  const pending = todos.filter(t => !t.done);
+  document.getElementById('todo-count').textContent = pending.length || '';
+  document.getElementById('todo-list').innerHTML = todos.length
+    ? todos.map((t, i) => `
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
+        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTodo(${i})"
+          style="width:16px;height:16px;cursor:pointer;accent-color:#7c3aed;">
+        <span style="flex:1;font-size:13px;${t.done ? 'text-decoration:line-through;color:var(--muted);' : ''}">${t.text}</span>
+        <button onclick="deleteTodo(${i})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:0 4px;">✕</button>
+      </div>`).join('')
+    : `<div style="font-size:13px;color:var(--muted);padding:4px 0;">No to-dos yet — add one below.</div>`;
+}
+function addTodo() {
+  const input = document.getElementById('todo-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const todos = getTodos();
+  todos.unshift({ text, done: false });
+  saveTodos(todos);
+  input.value = '';
+  renderTodos();
+}
+function toggleTodo(i) {
+  const todos = getTodos();
+  todos[i].done = !todos[i].done;
+  saveTodos(todos);
+  renderTodos();
+}
+function deleteTodo(i) {
+  const todos = getTodos();
+  todos.splice(i, 1);
+  saveTodos(todos);
+  renderTodos();
 }
 
 
 // ---- 6. MY TASKS ----
 function renderMyTasks() {
-  document.getElementById('my-tasks-title').textContent = `${currentUser}'s Tasks`;
-  const mine = tasks.filter(t => t.owner === currentUser && t.status !== 'Posted' && !t.done);
-  const done  = tasks.filter(t => t.owner === currentUser && (t.done || t.status === 'Posted'));
+  const me = currentUser;
+  document.getElementById('my-tasks-title').textContent = `${me}'s Tasks`;
 
-  document.getElementById('my-task-body').innerHTML = mine.length
-    ? mine.map(t => `<tr>
-        <td style="font-weight:600;">${t.client}</td><td>${t.name}</td>
-        <td><span style="font-size:11px;color:var(--muted);">${t.type || ''}</span></td>
-        <td>${ddPill(t.deadline)}</td><td>${statusPill(t.status)}</td>
-        <td style="font-size:11px;color:${t.blocker && t.blocker !== 'None' ? 'var(--warning)' : 'var(--muted)'};">${t.blocker || '—'}</td>
-        <td style="font-size:11px;color:var(--muted);">${t.next_step || ''}</td>
-        <td style="display:flex;gap:4px;">
-          <button class="btn btn-sm" onclick="markDone('${t.id}')">✓ Done</button>
-          ${currentProfile?.role === 'owner' ? `<button class="btn btn-sm btn-danger" onclick="deleteTask('${t.id}')">✕</button>` : ''}
-        </td>
+  const filter = document.getElementById('my-tasks-filter')?.value || 'active';
+
+  const meLower = me.trim().toLowerCase();
+  const myTasks = tasks.filter(t => t.owner && t.owner.trim().toLowerCase() === meLower);
+  const myPosts = posts.filter(p => p.assigned_editor && p.assigned_editor.trim().toLowerCase() === meLower);
+
+  const titleEl = document.getElementById('my-tasks-card-title');
+  const countEl = document.getElementById('my-assigned-count');
+
+  // ---- DONE view ----
+  if (filter === 'done') {
+    if (titleEl) titleEl.textContent = 'Completed Tasks';
+    const done = myTasks.filter(t => t.done || t.status === 'Exported');
+    if (countEl) countEl.textContent = done.length || '';
+    document.getElementById('my-task-body').innerHTML = done.length
+      ? done.map(t => `<tr>
+          <td style="font-weight:600;">${t.client}</td>
+          <td>${t.name}</td>
+          <td><span style="font-size:11px;color:var(--muted);">${t.type || '—'}</span></td>
+          <td>${fmt(t.deadline)}</td>
+          <td><span class="pill pill-success">Exported</span></td>
+          <td><span style="font-size:11px;color:var(--muted);">${t.next_step || ''}</span></td>
+          <td></td>
+        </tr>`).join('')
+      : `<tr><td colspan="7" class="empty-state">Nothing completed yet.</td></tr>`;
+    return;
+  }
+
+  // ---- Build active + post rows ----
+  const TASK_STATUSES = ['Active', 'Sent for Caption', 'Exported'];
+
+  const activeTasks = myTasks.filter(t => t.status !== 'Exported' && !t.done);
+  const taskRows = activeTasks.map(t => ({
+    _isHigh: t.priority === 'High',
+    _date:   t.deadline ? new Date(t.deadline) : new Date('9999-12-31'),
+    client:  t.client,
+    name:    t.name,
+    type:    t.type || '—',
+    date:    ddPill(t.deadline),
+    status:  `<select onchange="updateTaskStatus('${t.id}',this.value)"
+        style="font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--w);cursor:pointer;font-weight:500;">
+        ${TASK_STATUSES.map(s => `<option value="${s}" ${s === (t.status || 'Active') ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>`,
+    note:    t.blocker && t.blocker !== 'None'
+               ? `<span style="color:var(--warning);font-size:11px;">⚠ ${t.blocker}</span>`
+               : `<span style="font-size:11px;color:var(--muted);">${t.next_step || ''}</span>`,
+    actions: currentProfile?.role === 'owner'
+      ? `<button class="btn btn-sm btn-danger" onclick="deleteTask('${t.id}')">✕</button>`
+      : '',
+  }));
+
+  const postRows = myPosts.map(p => ({
+    _isHigh: false,
+    _date:   p.date ? new Date(p.date) : new Date('9999-12-31'),
+    client:  p.client,
+    name:    (p.content_type || 'Post') + ' 📅',
+    type:    p.platform || '—',
+    date:    ddPill(p.date),
+    status:  `<select onchange="updatePostStatus('${p.id}',this.value)"
+        style="font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--w);cursor:pointer;font-weight:500;">
+        ${TASK_STATUSES.map(s => `<option value="${s}" ${s === (p.caption_status || 'Active') ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>`,
+    note:    `<span style="font-size:11px;color:var(--muted);">${p.notes || ''}</span>`,
+    actions: '',
+  }));
+
+  let combined = [...taskRows, ...postRows].sort((a, b) => a._date - b._date);
+
+  // ---- HIGH PRIORITY view ----
+  if (filter === 'high') {
+    if (titleEl) titleEl.textContent = 'High Priority Tasks';
+    combined = combined.filter(r => r._isHigh);
+  } else {
+    if (titleEl) titleEl.textContent = 'Assigned Tasks';
+  }
+
+  if (countEl) countEl.textContent = combined.length || '';
+
+  document.getElementById('my-task-body').innerHTML = combined.length
+    ? combined.map(r => `<tr>
+        <td style="font-weight:600;">${r.client}</td>
+        <td>${r.name}</td>
+        <td><span style="font-size:11px;color:var(--muted);">${r.type}</span></td>
+        <td>${r.date}</td>
+        <td>${r.status}</td>
+        <td>${r.note}</td>
+        <td style="display:flex;gap:4px;">${r.actions}</td>
       </tr>`).join('')
-    : `<tr><td colspan="8" class="empty-state">No active tasks 🎉</td></tr>`;
+    : `<tr><td colspan="7" class="empty-state">${filter === 'high' ? 'No high priority tasks.' : `No tasks assigned to ${me}. Add one from the Dashboard.`}</td></tr>`;
 
-  document.getElementById('my-done-body').innerHTML = done.map(t =>
-    `<tr><td>${t.client}</td><td>${t.name}</td><td><span class="pill pill-success">Done</span></td></tr>`
-  ).join('') || `<tr><td colspan="3" class="empty-state">None yet.</td></tr>`;
+  // ---- Daily Done section (always shown, regardless of filter) ----
+  const todayStr = new Date().toISOString().split('T')[0];
+  const doneToday = [
+    ...myTasks
+      .filter(t => t.status === 'Exported' && t.status_updated_at?.startsWith(todayStr))
+      .map(t => ({ client: t.client, name: t.name, type: t.type || '—', at: t.status_updated_at })),
+    ...myPosts
+      .filter(p => p.caption_status === 'Exported' && p.status_updated_at?.startsWith(todayStr))
+      .map(p => ({ client: p.client, name: (p.content_type || 'Post') + ' 📅', type: p.platform || '—', at: p.status_updated_at })),
+  ];
+  const dailyDoneCard = document.getElementById('daily-done-card');
+  if (doneToday.length) {
+    dailyDoneCard.style.display = 'block';
+    document.getElementById('daily-done-count').textContent = doneToday.length;
+    document.getElementById('daily-done-body').innerHTML = doneToday.map(d => `<tr>
+      <td style="font-weight:600;">${d.client}</td>
+      <td>${d.name}</td>
+      <td><span style="font-size:11px;color:var(--muted);">${d.type}</span></td>
+      <td style="font-size:12px;color:var(--success);font-weight:600;">${new Date(d.at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</td>
+    </tr>`).join('');
+  } else {
+    dailyDoneCard.style.display = 'none';
+  }
+}
+
+async function updateTaskStatus(id, status) {
+  const now = new Date().toISOString();
+  await dbUpdate('tasks', id, { status, status_updated_at: now });
+  tasks = tasks.map(t => t.id === id ? { ...t, status, status_updated_at: now } : t);
+  const activePage = document.querySelector('.page.active')?.id.replace('page-', '');
+  if (activePage === 'all-tasks') renderAllTasks();
+  else renderMyTasks();
+  renderDash();
+}
+
+async function updatePostStatus(id, status) {
+  const now = new Date().toISOString();
+  await dbUpdate('posts', id, { caption_status: status, status_updated_at: now });
+  posts = posts.map(p => p.id === id ? { ...p, caption_status: status, status_updated_at: now } : p);
+  const activePage = document.querySelector('.page.active')?.id.replace('page-', '');
+  if (activePage === 'all-tasks') renderAllTasks();
+  else renderMyTasks();
 }
 
 async function markDone(id) {
-  await dbUpdate('tasks', id, { done: true, status: 'Posted' });
-  tasks = tasks.map(t => t.id === id ? { ...t, done: true, status: 'Posted' } : t);
+  const now = new Date().toISOString();
+  await dbUpdate('tasks', id, { done: true, status: 'Exported', status_updated_at: now });
+  tasks = tasks.map(t => t.id === id ? { ...t, done: true, status: 'Exported', status_updated_at: now } : t);
   renderMyTasks(); renderDash();
+}
+
+async function markCaptionDone(id) {
+  await dbUpdate('tasks', id, { caption_done: true });
+  tasks = tasks.map(t => t.id === id ? { ...t, caption_done: true } : t);
+  toast('Caption marked as done — editor will be notified.');
+  renderDash();
+}
+
+async function markPostCaptionDone(id) {
+  await dbUpdate('posts', id, { caption_status: 'Caption Ready' });
+  posts = posts.map(p => p.id === id ? { ...p, caption_status: 'Caption Ready' } : p);
+  toast('Caption marked as done — editor will be notified.');
+  renderDash();
 }
 
 
 // ---- 7. ALL TASKS ----
+
+// Map post caption status → task-style status for display
+function captionToStatus(cs) {
+  // Pass through new workflow statuses directly
+  if (cs === 'Active' || cs === 'Sent for Caption' || cs === 'Exported') return cs;
+  // Caption Ready = manager done, waiting for editor to export
+  if (cs === 'Caption Ready') return 'Sent for Caption';
+  // Map legacy caption_status values
+  if (cs === 'Approved') return 'Exported';
+  return 'Active';
+}
+
+// Normalise a post into a task-shaped row for All Tasks / Kanban
+function postAsTask(p) {
+  return {
+    _isPost:   true,
+    id:        p.id,
+    client:    p.client,
+    name:      (p.content_type || 'Post') + ' 📅',
+    type:      p.platform || '—',
+    owner:     p.assigned_editor || '—',
+    deadline:  p.date,
+    status:    captionToStatus(p.caption_status),
+    priority:  '—',
+    blocker:   '—',
+    next_step: p.notes || '',
+    done:      false,
+  };
+}
+
 function renderAllTasks() {
   const of = document.getElementById('at-owner').value;
   const sf = document.getElementById('at-status').value;
-  const f  = tasks.filter(t => (!of || t.owner === of) && (!sf || t.status === sf));
+
+  const allItems = [
+    ...tasks,
+    ...posts.filter(p => p.assigned_editor).map(postAsTask),
+  ];
+  const f = allItems.filter(t => (!of || t.owner === of) && (!sf || t.status === sf));
+
+  const STATUS_OPTS = ['Active','Sent for Caption','Exported'];
+  const isOwner   = currentProfile?.role === 'owner';
+  const cuLower   = currentUser.trim().toLowerCase();
+
+  function statusCell(t) {
+    const isMine = t.owner && t.owner.trim().toLowerCase() === cuLower;
+    if (!isOwner && !isMine) return statusPill(t.status || 'Active');
+    const fn = t._isPost ? `updatePostStatus` : `updateTaskStatus`;
+    return `<select onchange="${fn}('${t.id}',this.value)"
+        style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);cursor:pointer;font-weight:500;">
+        ${STATUS_OPTS.map(s => `<option value="${s}" ${s === (t.status||'Active') ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>`;
+  }
 
   document.getElementById('all-task-body').innerHTML = f.length
     ? f.map(t => `<tr>
         <td style="font-weight:600;">${t.client}</td><td>${t.name}</td>
         <td><span style="font-size:11px;color:var(--muted);">${t.type || ''}</span></td>
         <td>${avBadge(t.owner)}</td><td>${ddPill(t.deadline)}</td>
-        <td>${statusPill(t.status)}</td><td>${priPill(t.priority)}</td>
+        <td>${statusCell(t)}</td>
+        <td>${t._isPost ? '<span style="font-size:11px;color:var(--muted);">—</span>' : priPill(t.priority)}</td>
         <td style="font-size:11px;color:${t.blocker && t.blocker !== 'None' ? 'var(--warning)' : 'var(--muted)'};">${t.blocker || '—'}</td>
         <td style="font-size:11px;color:var(--muted);">${t.next_step || ''}</td>
-        <td><button class="btn btn-sm btn-danger" onclick="deleteTask('${t.id}')">✕</button></td>
+        <td>${isOwner && !t._isPost ? `<button class="btn btn-sm btn-danger" onclick="deleteTask('${t.id}')">✕</button>` : ''}</td>
       </tr>`).join('')
     : `<tr><td colspan="10" class="empty-state">No tasks match filters.</td></tr>`;
 }
@@ -483,16 +931,22 @@ async function deleteTask(id) {
 
 // ---- 8. KANBAN ----
 function renderKanban() {
-  const cols = ['Not started', 'In progress', 'Waiting for review', 'Changes needed', 'Approved', 'Posted'];
+  const cols = ['Active', 'Sent for Caption', 'Exported'];
+
+  const allItems = [
+    ...tasks,
+    ...posts.filter(p => p.assigned_editor).map(postAsTask),
+  ];
+
   document.getElementById('kanban-board').innerHTML = cols.map(col => {
-    const cards = tasks.filter(t => t.status === col);
+    const cards = allItems.filter(t => t.status === col);
     return `<div class="kanban-col">
       <div class="kanban-col-title">${col}<span class="kanban-count">${cards.length}</span></div>
       ${cards.map(t => `
         <div class="kanban-card">
           <div class="kanban-card-title">${t.name}</div>
           <div class="kanban-card-client">${t.client}</div>
-          <div class="kanban-card-meta">${avBadge(t.owner)}${priPill(t.priority)}</div>
+          <div class="kanban-card-meta">${avBadge(t.owner)}${t._isPost ? '' : priPill(t.priority)}</div>
           <div style="font-size:10px;color:var(--muted);margin-top:4px;">${fmt(t.deadline)}</div>
         </div>`).join('') || '<div style="font-size:11px;color:var(--muted);text-align:center;padding:12px 0;">Empty</div>'}
     </div>`;
@@ -502,21 +956,98 @@ function renderKanban() {
 
 // ---- 9. TEAM ----
 function renderTeam() {
-  const members = ['Shanju', 'Bharath', 'Minhaaj', 'Gowtham', 'Bava'];
+  const members = teamProfiles.filter(p => p.role !== 'owner').map(p => p.name);
+  if (!members.length) {
+    document.getElementById('person-grid').innerHTML = '<div class="empty-state">No team members yet.</div>';
+    document.getElementById('team-monthly-summary').innerHTML = '';
+    document.getElementById('team-daily-output').innerHTML = '';
+    return;
+  }
+
+  // ---- Monthly Summary ----
+  const now      = new Date();
+  const monthPfx = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const todayStr = now.toISOString().split('T')[0];
+  const monthLabel = now.toLocaleDateString('en-IN', { month: 'long' });
+
+  const teamMonthExp = tasks.filter(t => t.status === 'Exported' && t.status_updated_at?.startsWith(monthPfx)).length
+    + posts.filter(p => p.caption_status === 'Exported' && p.status_updated_at?.startsWith(monthPfx)).length;
+  const teamMonthCap = tasks.filter(t => (t.status === 'Sent for Caption' || t.status === 'Exported') && t.status_updated_at?.startsWith(monthPfx)).length;
+
+  document.getElementById('team-monthly-summary').innerHTML = `
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:stretch;">
+      <div class="mcard success" style="min-width:130px;">
+        <div class="mcard-label">Team Exported (${monthLabel})</div>
+        <div class="mcard-val">${teamMonthExp}</div>
+        <div class="mcard-sub">${teamMonthCap} sent for caption</div>
+      </div>
+      ${members.map(m => {
+        const mLow = m.trim().toLowerCase();
+        const exp  = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Exported' && t.status_updated_at?.startsWith(monthPfx)).length
+                   + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Exported' && p.status_updated_at?.startsWith(monthPfx)).length;
+        const cap  = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && (t.status === 'Sent for Caption' || t.status === 'Exported') && t.status_updated_at?.startsWith(monthPfx)).length;
+        return `<div class="mcard info" style="min-width:130px;">
+          <div class="mcard-label">${memberEmoji(m)} ${m}</div>
+          <div class="mcard-val">${exp}</div>
+          <div class="mcard-sub">${cap ? `${cap} for caption` : 'exported this month'}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  // ---- Daily Output ----
+  document.getElementById('team-daily-output').innerHTML = `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><span class="card-title">📊 Daily Output — Today</span></div>
+      <div class="card-body" style="padding:0;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr>
+            <th style="text-align:left;padding:10px 14px;font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Editor</th>
+            <th style="text-align:center;padding:10px 14px;font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Exported Today</th>
+            <th style="text-align:center;padding:10px 14px;font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Sent for Caption</th>
+            <th style="text-align:center;padding:10px 14px;font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Active</th>
+          </tr></thead>
+          <tbody>
+            ${members.map(m => {
+              const mLow     = m.trim().toLowerCase();
+              const expToday = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Exported' && t.status_updated_at?.startsWith(todayStr)).length
+                             + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Exported' && p.status_updated_at?.startsWith(todayStr)).length;
+              const capToday = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Sent for Caption' && t.status_updated_at?.startsWith(todayStr)).length
+                             + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Sent for Caption' && p.status_updated_at?.startsWith(todayStr)).length;
+              const active   = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status !== 'Exported' && !t.done).length
+                             + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && captionToStatus(p.caption_status) !== 'Exported').length;
+              return `<tr style="border-top:1px solid var(--border);">
+                <td style="padding:10px 14px;">${avBadge(m)}</td>
+                <td style="text-align:center;padding:10px 14px;font-size:16px;font-weight:700;color:${expToday ? '#10b981' : 'var(--muted)'};">${expToday}</td>
+                <td style="text-align:center;padding:10px 14px;font-size:16px;font-weight:700;color:${capToday ? 'var(--warning)' : 'var(--muted)'};">${capToday}</td>
+                <td style="text-align:center;padding:10px 14px;font-size:16px;font-weight:700;">${active}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
   document.getElementById('person-grid').innerHTML = members.map(m => {
-    const mt   = tasks.filter(t => t.owner === m && !t.done);
-    const ov   = mt.filter(t => daysDiff(t.deadline) < 0).length;
-    const done = tasks.filter(t => t.owner === m && (t.done || t.status === 'Posted')).length;
+    const mLow     = m.trim().toLowerCase();
+    const mt       = tasks.filter(t => t.owner && t.owner.trim().toLowerCase() === mLow && t.status !== 'Exported' && !t.done);
+    const mp       = posts.filter(p => p.assigned_editor && p.assigned_editor.trim().toLowerCase() === mLow && captionToStatus(p.caption_status) !== 'Exported');
+    const active   = mt.length + mp.length;
+    const ov       = mt.filter(t => daysDiff(t.deadline) < 0).length
+                   + mp.filter(p => daysDiff(p.date) < 0).length;
+    const done     = tasks.filter(t => t.owner && t.owner.trim().toLowerCase() === mLow && (t.done || t.status === 'Exported')).length
+                   + posts.filter(p => p.assigned_editor && p.assigned_editor.trim().toLowerCase() === mLow && captionToStatus(p.caption_status) === 'Exported').length;
+    const caption  = mt.filter(t => t.status === 'Sent for Caption').length
+                   + mp.filter(p => captionToStatus(p.caption_status) === 'Sent for Caption').length;
     return `<div class="person-card" onclick="showTeamDetail('${m}')">
       <div class="person-header">
-        <div class="person-avatar" style="background:${PAL[m]};color:${PALTEXT[m]};">${EMOJIS[m]}</div>
-        <div><div class="person-name">${m}</div><div class="person-role">${ROLES[m]}</div></div>
+        <div class="person-avatar" style="background:${memberBg(m)};color:${memberFg(m)};">${memberEmoji(m)}</div>
+        <div><div class="person-name">${m}</div><div class="person-role">${ROLES[m] || (teamProfiles.find(p => p.name === m)?.role || '')}</div></div>
       </div>
       <div class="person-stats">
-        <div class="pstat"><div class="pstat-val">${mt.length}</div><div class="pstat-label">Active</div></div>
+        <div class="pstat"><div class="pstat-val">${active}</div><div class="pstat-label">Active</div></div>
         <div class="pstat"><div class="pstat-val" style="${ov ? 'color:var(--danger)' : ''}">${ov}</div><div class="pstat-label">Overdue</div></div>
-        <div class="pstat"><div class="pstat-val" style="color:var(--success);">${done}</div><div class="pstat-label">Done</div></div>
-        <div class="pstat"><div class="pstat-val">${mt.filter(t => t.priority === 'High').length}</div><div class="pstat-label">High Pri</div></div>
+        <div class="pstat"><div class="pstat-val" style="color:var(--success);">${done}</div><div class="pstat-label">Exported</div></div>
+        <div class="pstat"><div class="pstat-val" style="${caption ? 'color:var(--warning)' : ''}">${caption}</div><div class="pstat-label">For Caption</div></div>
       </div></div>`;
   }).join('');
 }
@@ -524,11 +1055,31 @@ function renderTeam() {
 function showTeamDetail(m) {
   const card = document.getElementById('team-detail-card');
   card.style.display = 'block';
-  document.getElementById('team-detail-name').textContent = `${EMOJIS[m]} ${m} — All Tasks`;
-  const mt = tasks.filter(t => t.owner === m);
-  document.getElementById('team-detail-body').innerHTML = mt.map(t =>
-    `<tr><td style="font-weight:600;">${t.client}</td><td>${t.name}</td><td>${statusPill(t.status)}</td><td>${ddPill(t.deadline)}</td><td style="font-size:11px;color:var(--muted);">${t.next_step || ''}</td></tr>`
-  ).join('') || `<tr><td colspan="5" class="empty-state">No tasks.</td></tr>`;
+  document.getElementById('team-detail-name').textContent = `${memberEmoji(m)} ${m} — All Tasks`;
+
+  const mLow = m.trim().toLowerCase();
+  const taskRows = tasks.filter(t => t.owner && t.owner.trim().toLowerCase() === mLow).map(t =>
+    `<tr>
+      <td style="font-weight:600;">${t.client}</td>
+      <td>${t.name}</td>
+      <td>${statusPill(t.status || 'Active')}</td>
+      <td>${ddPill(t.deadline)}</td>
+      <td style="font-size:11px;color:var(--muted);">${t.next_step || ''}</td>
+    </tr>`
+  );
+  const postRows = posts.filter(p => p.assigned_editor && p.assigned_editor.trim().toLowerCase() === mLow).map(p =>
+    `<tr>
+      <td style="font-weight:600;">${p.client}</td>
+      <td>${(p.content_type || 'Post') + ' 📅'}</td>
+      <td>${statusPill(captionToStatus(p.caption_status))}</td>
+      <td>${ddPill(p.date)}</td>
+      <td style="font-size:11px;color:var(--muted);">${p.platform || ''}</td>
+    </tr>`
+  );
+  const allRows = [...taskRows, ...postRows];
+
+  document.getElementById('team-detail-body').innerHTML = allRows.join('') ||
+    `<tr><td colspan="5" class="empty-state">No tasks.</td></tr>`;
   card.scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -570,9 +1121,21 @@ function renderShootCal() {
 }
 
 function renderPostCal() {
-  buildCal('post', postCalMonth, posts, () => 'post');
-  document.getElementById('post-list').innerHTML = posts.length
-    ? posts.sort((a, b) => new Date(a.date) - new Date(b.date)).map(p => `
+  // Populate client filter dropdown
+  const clientFilter = document.getElementById('post-cal-client-filter');
+  if (clientFilter) {
+    const clients = [...new Set(posts.map(p => p.client))].sort();
+    const current = clientFilter.value;
+    clientFilter.innerHTML = '<option value="">All Clients</option>' +
+      clients.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`).join('');
+  }
+
+  const filterClient = clientFilter ? clientFilter.value : '';
+  const filtered = filterClient ? posts.filter(p => p.client === filterClient) : posts;
+
+  buildCal('post', postCalMonth, filtered, () => 'post');
+  document.getElementById('post-list').innerHTML = filtered.length
+    ? filtered.sort((a, b) => new Date(a.date) - new Date(b.date)).map(p => `
         <div class="alert-row">
           <div class="adot adot-green"></div>
           <div style="flex:1;">
@@ -600,37 +1163,116 @@ async function deletePost(id)  { await dbDelete('posts',  id); posts  = posts.fi
 
 
 // ---- 12. PIPELINE ----
+
+// Derive status from old boolean columns if content_status isn't set
+function getContentStatus(p) {
+  if (p.content_status) return p.content_status;
+  if (p.scheduled) return 'Scheduled';
+  if (p.caption)   return 'Caption Ready';
+  if (p.approved)  return 'Approved';
+  if (p.qc)        return 'QC Done';
+  if (p.edit)      return 'Edit Done';
+  if (p.shot)      return 'Shot Done';
+  return 'Planned';
+}
+
+function contentStatusPill(s) {
+  const map = {
+    'Planned':          'pill-neutral',
+    'Script Ready':     'pill-info',
+    'Shot Pending':     'pill-warning',
+    'Shot Done':        'pill-info',
+    'Edit Pending':     'pill-warning',
+    'Edit Done':        'pill-info',
+    'QC Pending':       'pill-warning',
+    'QC Done':          'pill-info',
+    'Approval Pending': 'pill-warning',
+    'Approved':         'pill-success',
+    'Caption Ready':    'pill-info',
+    'Scheduled':        'pill-success',
+    'Posted':           'pill-success',
+  };
+  return `<span class="pill ${map[s] || 'pill-neutral'}">${s || 'Planned'}</span>`;
+}
+
+async function updateContentStatus(id, status) {
+  const updates = { content_status: status };
+  if (status === 'Posted') updates.posted_date = new Date().toISOString().split('T')[0];
+  await dbUpdate('pipeline', id, updates);
+  pipeline = pipeline.map(p => p.id === id ? { ...p, ...updates } : p);
+  renderPipeline();
+}
+
+function showClientPipeline(client) {
+  const items = pipeline.filter(p => p.client === client);
+  document.getElementById('client-pipeline-name').textContent = client + ' — Content Pipeline';
+  const rows = items.map(p => {
+    const status = getContentStatus(p);
+    return `<tr>
+      <td style="font-weight:600;">${p.content_title || '—'}</td>
+      <td>${contentStatusPill(status)}</td>
+      <td>${p.platform || '—'}</td>
+      <td>${fmt(p.planned_date)}</td>
+      <td>${fmt(p.posted_date)}</td>
+      <td>
+        <select onchange="updateContentStatus('${p.id}', this.value)" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);">
+          ${CONTENT_STATUSES.map(s => `<option value="${s}" ${s === status ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td><button class="btn btn-sm btn-danger" onclick="deletePL('${p.id}')">✕</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" class="empty-state">No items for this client.</td></tr>`;
+  document.getElementById('client-pipeline-body').innerHTML = `
+    <div style="overflow-x:auto;">
+      <table>
+        <thead><tr><th>Content</th><th>Status</th><th>Platform</th><th>Planned</th><th>Posted</th><th>Update</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  document.getElementById('pipeline-client-detail').style.display = 'block';
+  document.getElementById('pipeline-client-detail').scrollIntoView({ behavior: 'smooth' });
+}
+
 function renderPipeline() {
-  document.getElementById('pipeline-body').innerHTML = pipeline.length
-    ? pipeline.map(p => {
-        const gaps = [];
-        if (!p.shot) gaps.push('Shoot');
-        else if (!p.edit)      gaps.push('Edit');
-        else if (!p.qc)        gaps.push('QC');
-        else if (!p.approved)  gaps.push('Approval');
-        else if (!p.caption)   gaps.push('Caption');
-        else if (!p.scheduled) gaps.push('Schedule');
+  // Populate client filter
+  const clientFilter = document.getElementById('pl-filter-client');
+  if (clientFilter) {
+    const clients = [...new Set(pipeline.map(p => p.client))].sort();
+    const current = clientFilter.value;
+    clientFilter.innerHTML = '<option value="">All Clients</option>' +
+      clients.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`).join('');
+  }
+
+  const filterClient = clientFilter ? clientFilter.value : '';
+  const filtered = filterClient ? pipeline.filter(p => p.client === filterClient) : pipeline;
+
+  document.getElementById('pipeline-body').innerHTML = filtered.length
+    ? filtered.map(p => {
+        const status = getContentStatus(p);
+        const plannedD = p.planned_date ? fmt(p.planned_date) : '—';
+        const postedD  = p.posted_date  ? fmt(p.posted_date)  : '—';
+        const gap = (p.planned_date && p.posted_date)
+          ? Math.round((new Date(p.posted_date) - new Date(p.planned_date)) / 86400000) + 'd'
+          : status === 'Posted' ? '—' : (p.planned_date ? `${daysDiff(p.planned_date)}d` : '—');
         return `<tr>
-          <td style="font-weight:700;">${p.client}</td><td>${p.planned || 0}</td>
-          <td><input type="checkbox" ${p.shot      ? 'checked' : ''} onchange="togglePL('${p.id}','shot',this.checked)"></td>
-          <td><input type="checkbox" ${p.edit      ? 'checked' : ''} onchange="togglePL('${p.id}','edit',this.checked)"></td>
-          <td><input type="checkbox" ${p.qc        ? 'checked' : ''} onchange="togglePL('${p.id}','qc',this.checked)"></td>
-          <td><input type="checkbox" ${p.approved  ? 'checked' : ''} onchange="togglePL('${p.id}','approved',this.checked)"></td>
-          <td><input type="checkbox" ${p.caption   ? 'checked' : ''} onchange="togglePL('${p.id}','caption',this.checked)"></td>
-          <td><input type="checkbox" ${p.scheduled ? 'checked' : ''} onchange="togglePL('${p.id}','scheduled',this.checked)"></td>
-          <td>${p.posted || 0}</td>
-          <td>${gaps.length ? `<span class="pill pill-danger">${gaps[0]}</span>` : `<span class="pill pill-success">Ready</span>`}</td>
+          <td style="font-weight:700;cursor:pointer;color:var(--p600);" onclick="showClientPipeline('${p.client}')">${p.client}</td>
+          <td>${p.content_title || '—'}</td>
+          <td>${contentStatusPill(status)}</td>
+          <td style="font-size:12px;color:var(--muted);">${p.platform || '—'}</td>
+          <td style="font-size:12px;">${plannedD}</td>
+          <td style="font-size:12px;">${postedD}</td>
+          <td style="font-size:12px;color:var(--muted);">${gap}</td>
+          <td>
+            <select onchange="updateContentStatus('${p.id}', this.value)" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);">
+              ${CONTENT_STATUSES.map(s => `<option value="${s}" ${s === status ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+          </td>
           <td><button class="btn btn-sm btn-danger" onclick="deletePL('${p.id}')">✕</button></td>
         </tr>`;
       }).join('')
-    : `<tr><td colspan="11" class="empty-state">No clients in pipeline.</td></tr>`;
+    : `<tr><td colspan="9" class="empty-state">No content in pipeline.</td></tr>`;
 }
 
-async function togglePL(id, key, val) {
-  await dbUpdate('pipeline', id, { [key]: val });
-  pipeline = pipeline.map(p => p.id === id ? { ...p, [key]: val } : p);
-  renderPipeline();
-}
 async function deletePL(id) { await dbDelete('pipeline', id); pipeline = pipeline.filter(p => p.id !== id); renderPipeline(); }
 
 
@@ -766,6 +1408,21 @@ async function saveTask() {
   const saved = await dbInsert('tasks', row);
   if (saved) {
     tasks.unshift(saved);
+
+    // Auto-link video tasks to the pipeline
+    if (VIDEO_TYPES.includes(row.type)) {
+      const plRow = {
+        client:         row.client,
+        content_title:  row.name,
+        content_status: 'Planned',
+        platform:       null,
+        planned_date:   row.deadline || null,
+        task_id:        saved.id,
+      };
+      const plSaved = await dbInsert('pipeline', plRow, true); // silent = no extra toast
+      if (plSaved) { pipeline.push(plSaved); toast('Task saved & added to pipeline!'); }
+    }
+
     closeModal('modal-task');
     ['t-client','t-name','t-blocker','t-next','t-deadline'].forEach(i => document.getElementById(i).value = '');
     renderPage(document.querySelector('.page.active')?.id.replace('page-', ''));
@@ -792,28 +1449,26 @@ async function savePost() {
   if (!client || !date) { toast('Client and date required.'); return; }
   const row = {
     client, date,
-    platform:       document.getElementById('po-platform').value,
-    content_type:   document.getElementById('po-ctype').value,
-    caption_status: document.getElementById('po-cap').value,
-    notes:          document.getElementById('po-notes').value,
+    platform:         document.getElementById('po-platform').value,
+    content_type:     document.getElementById('po-ctype').value,
+    caption_status:   document.getElementById('po-cap').value,
+    assigned_editor:  document.getElementById('po-editor').value || null,
+    notes:            document.getElementById('po-notes').value,
   };
   const saved = await dbInsert('posts', row);
   if (saved) { posts.push(saved); closeModal('modal-post'); renderPostCal(); }
 }
 
 async function savePipeline() {
-  const client = document.getElementById('pl-client').value.trim();
-  if (!client) { toast('Client name required.'); return; }
+  const client       = document.getElementById('pl-client').value.trim();
+  const contentTitle = document.getElementById('pl-content-title').value.trim();
+  if (!client || !contentTitle) { toast('Client and content title required.'); return; }
   const row = {
     client,
-    planned:   parseInt(document.getElementById('pl-planned').value) || 2,
-    shot:      document.getElementById('pl-shot').checked,
-    edit:      document.getElementById('pl-edit').checked,
-    qc:        document.getElementById('pl-qc').checked,
-    approved:  document.getElementById('pl-approved').checked,
-    caption:   document.getElementById('pl-caption').checked,
-    scheduled: document.getElementById('pl-scheduled').checked,
-    posted:    parseInt(document.getElementById('pl-posted').value) || 0,
+    content_title:  contentTitle,
+    platform:       document.getElementById('pl-platform').value,
+    planned_date:   document.getElementById('pl-planned-date').value || null,
+    content_status: document.getElementById('pl-content-status').value || 'Planned',
   };
   const saved = await dbInsert('pipeline', row);
   if (saved) { pipeline.push(saved); closeModal('modal-pipeline'); renderPipeline(); }

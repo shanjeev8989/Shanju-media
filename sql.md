@@ -1,3 +1,47 @@
+## Step 6 — Daily tracking + Caption workflow (run after Step 5)
+
+```sql
+-- Track when a task/post status was last changed (used for daily + monthly counts)
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS status_updated_at timestamptz;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS status_updated_at timestamptz;
+
+-- Caption workflow: manager marks caption work as done, notifying the editor
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS caption_done boolean DEFAULT false;
+```
+
+---
+
+## Step 5 — Assign editor to posts (run after Step 4)
+
+```sql
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS assigned_editor text;
+```
+
+---
+
+## Step 4 — Role rename + Pipeline redesign (run after Step 3)
+
+Run this in your Supabase **SQL Editor**:
+
+```sql
+-- Rename 'admin' role to 'manager' in profiles table
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+ALTER TABLE profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('owner', 'manager', 'editor'));
+
+-- Update any existing admin rows to manager
+UPDATE profiles SET role = 'manager' WHERE role = 'admin';
+
+-- Add new pipeline columns for per-content-item tracking
+ALTER TABLE pipeline ADD COLUMN IF NOT EXISTS content_title text;
+ALTER TABLE pipeline ADD COLUMN IF NOT EXISTS task_id uuid;
+ALTER TABLE pipeline ADD COLUMN IF NOT EXISTS content_status text DEFAULT 'Planned';
+ALTER TABLE pipeline ADD COLUMN IF NOT EXISTS platform text;
+ALTER TABLE pipeline ADD COLUMN IF NOT EXISTS planned_date date;
+ALTER TABLE pipeline ADD COLUMN IF NOT EXISTS posted_date date;
+```
+
+---
+
 ## Step 3 — Approval System (run after Step 2)
 
 ```sql

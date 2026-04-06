@@ -61,7 +61,7 @@
         <label>Your Role</label>
         <select id="signup-role-select">
           <option value="editor">Editor</option>
-          <option value="admin">Admin</option>
+          <option value="manager">Manager</option>
         </select>
       </div>
       <div class="fg"><label>Email</label><input type="email" id="signup-email" placeholder="your@email.com"></div>
@@ -150,7 +150,7 @@
           <div class="page-title" id="dash-title">Founder Dashboard</div>
           <div class="page-sub"  id="dash-sub">Full company overview</div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="openModal('modal-task')">+ Add Task</button>
+        <button class="btn btn-primary btn-sm" onclick="populateTeamDropdowns();openModal('modal-task')">+ Add Task</button>
       </div>
       <!-- Pending approvals — only visible to Shanju when there are pending users -->
       <div class="card" id="pending-approvals-card" style="display:none;border:2px solid var(--warning);">
@@ -164,6 +164,41 @@
       <div class="metric-grid" id="dash-metrics">
         <div class="loading"><div class="spinner"></div>Loading...</div>
       </div>
+
+      <!-- Caption Queue — shown to manager/owner when editors send tasks for caption -->
+      <div class="card" id="caption-queue-card" style="display:none;border:2px solid var(--warning);">
+        <div class="card-header">
+          <span class="card-title">📝 Caption Queue</span>
+          <span class="pill pill-warning" id="caption-queue-count"></span>
+        </div>
+        <div class="card-body" id="caption-queue-body"></div>
+      </div>
+
+      <!-- Caption Ready — shown to editor when manager has finished caption work -->
+      <div class="card" id="caption-ready-card" style="display:none;border:2px solid #10b981;">
+        <div class="card-header">
+          <span class="card-title">✅ Caption Ready — Add Caption &amp; Export</span>
+        </div>
+        <div class="card-body" id="caption-ready-body"></div>
+      </div>
+
+      <!-- Founder To-Do List — owner only -->
+      <div class="card" id="founder-todo-card" style="display:none;margin-bottom:16px;">
+        <div class="card-header">
+          <span class="card-title">📌 My To-Do List</span>
+          <span class="pill pill-neutral" id="todo-count"></span>
+        </div>
+        <div class="card-body" style="padding-bottom:8px;">
+          <div id="todo-list" style="margin-bottom:10px;"></div>
+          <div style="display:flex;gap:8px;">
+            <input id="todo-input" type="text" placeholder="Add a to-do…"
+              style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);font-size:13px;background:var(--w);"
+              onkeydown="if(event.key==='Enter') addTodo()">
+            <button class="btn btn-primary btn-sm" onclick="addTodo()">Add</button>
+          </div>
+        </div>
+      </div>
+
       <div class="row2">
         <div>
           <div class="card">
@@ -196,25 +231,40 @@
       <div class="topbar">
         <div>
           <div class="page-title" id="my-tasks-title">My Tasks</div>
-          <div class="page-sub">Your personal task list</div>
+          <div class="page-sub">Your assigned tasks and posts</div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="openModal('modal-task')">+ Add Task</button>
+        <select id="my-tasks-filter" onchange="renderMyTasks()"
+          style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-size:13px;background:var(--w);">
+          <option value="active">Active</option>
+          <option value="high">High Priority</option>
+          <option value="done">Done</option>
+        </select>
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">Active Tasks</span></div>
+        <div class="card-header">
+          <span class="card-title" id="my-tasks-card-title">Assigned Tasks</span>
+          <span class="pill pill-neutral" id="my-assigned-count"></span>
+        </div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Client</th><th>Task</th><th>Type</th><th>Deadline</th><th>Status</th><th>Blocker</th><th>Next Step</th><th></th></tr></thead>
-            <tbody id="my-task-body"><tr><td colspan="8" class="loading"><div class="spinner"></div></td></tr></tbody>
+            <thead id="my-tasks-thead">
+              <tr><th>Client</th><th>Task / Content</th><th>Type</th><th>Date</th><th>Status</th><th>Notes / Next Step</th><th></th></tr>
+            </thead>
+            <tbody id="my-task-body"><tr><td colspan="7" class="loading"><div class="spinner"></div></td></tr></tbody>
           </table>
         </div>
       </div>
-      <div class="card">
-        <div class="card-header"><span class="card-title">Completed</span></div>
+
+      <!-- Daily Done — auto-appears when tasks are Exported today -->
+      <div class="card" id="daily-done-card" style="display:none;border:2px solid #10b981;margin-top:16px;">
+        <div class="card-header">
+          <span class="card-title">✅ Today's Completed</span>
+          <span class="pill pill-success" id="daily-done-count"></span>
+        </div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Client</th><th>Task</th><th>Status</th></tr></thead>
-            <tbody id="my-done-body"></tbody>
+            <thead><tr><th>Client</th><th>Task / Content</th><th>Type</th><th>Completed At</th></tr></thead>
+            <tbody id="daily-done-body"></tbody>
           </table>
         </div>
       </div>
@@ -231,17 +281,16 @@
           <div class="page-sub">Every task across all clients</div>
         </div>
         <div class="btn-row">
-          <select id="at-owner"  onchange="renderAllTasks()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
+          <select id="at-owner" onchange="renderAllTasks()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
             <option value="">All team</option>
-            <option>Shanju</option><option>Bharath</option><option>Minhaaj</option><option>Gowtham</option><option>Bava</option>
           </select>
           <select id="at-status" onchange="renderAllTasks()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
             <option value="">All status</option>
-            <option>Not started</option><option>In progress</option><option>Waiting for review</option>
-            <option>Waiting for input</option><option>Changes needed</option><option>Approved</option>
-            <option>Delayed</option><option>Posted</option>
+            <option>Active</option>
+            <option>Sent for Caption</option>
+            <option>Exported</option>
           </select>
-          <button class="btn btn-primary btn-sm" onclick="openModal('modal-task')">+ Task</button>
+          <button class="btn btn-primary btn-sm" onclick="populateTeamDropdowns();openModal('modal-task')">+ Task</button>
         </div>
       </div>
       <div class="card" style="padding:0">
@@ -264,7 +313,7 @@
           <div class="page-title">Kanban Board</div>
           <div class="page-sub">Visual task flow</div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="openModal('modal-task')">+ Task</button>
+        <button class="btn btn-primary btn-sm" onclick="populateTeamDropdowns();openModal('modal-task')">+ Task</button>
       </div>
       <div class="kanban" id="kanban-board"></div>
     </div>
@@ -280,6 +329,8 @@
           <div class="page-sub">See who is doing what</div>
         </div>
       </div>
+      <div id="team-monthly-summary"></div>
+      <div id="team-daily-output"></div>
       <div class="person-grid" id="person-grid"></div>
       <div class="card" id="team-detail-card" style="display:none;">
         <div class="card-header"><span class="card-title" id="team-detail-name"></span></div>
@@ -336,7 +387,13 @@
           <div class="page-title">📅 Post Calendar</div>
           <div class="page-sub">Plan and track all posting days</div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="openModal('modal-post')">+ Add Post Day</button>
+        <div class="btn-row">
+          <select id="post-cal-client-filter" onchange="renderPostCal()"
+            style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
+            <option value="">All clients</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="populateEditorDropdown();openModal('modal-post')">+ Add Post Day</button>
+        </div>
       </div>
       <div class="card">
         <div class="card-header">
@@ -363,16 +420,35 @@
       <div class="topbar">
         <div>
           <div class="page-title">🚀 Posting Pipeline</div>
-          <div class="page-sub">Track content from idea to posted</div>
+          <div class="page-sub">Track every content item from idea to posted</div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="openModal('modal-pipeline')">+ Add Client</button>
+        <div class="btn-row">
+          <select id="pl-filter-client" onchange="renderPipeline()"
+            style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
+            <option value="">All clients</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="openModal('modal-pipeline')">+ Add Content</button>
+        </div>
       </div>
+
+      <!-- Global content table -->
       <div class="card" style="padding:0;">
         <div style="overflow-x:auto;">
-          <table style="min-width:800px;">
-            <thead><tr><th>Client</th><th>Planned</th><th>Shot</th><th>Edit</th><th>QC</th><th>Approved</th><th>Caption</th><th>Scheduled</th><th>Posted</th><th>Gap</th><th></th></tr></thead>
-            <tbody id="pipeline-body"><tr><td colspan="11" class="loading"><div class="spinner"></div></td></tr></tbody>
+          <table style="min-width:900px;">
+            <thead><tr><th>Client</th><th>Content</th><th>Status</th><th>Platform</th><th>Planned Date</th><th>Posted Date</th><th>Gap</th><th>Update Status</th><th></th></tr></thead>
+            <tbody id="pipeline-body"><tr><td colspan="9" class="loading"><div class="spinner"></div></td></tr></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- Client detail view (shown on row click) -->
+      <div id="pipeline-client-detail" style="display:none;">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title" id="client-pipeline-name"></span>
+            <button class="btn btn-sm" onclick="document.getElementById('pipeline-client-detail').style.display='none'">✕ Close</button>
+          </div>
+          <div class="card-body" id="client-pipeline-body"></div>
         </div>
       </div>
     </div>
@@ -447,23 +523,32 @@
       <div class="fg"><label>Task Name</label><input id="t-name" placeholder="e.g. Reel 2 Edit"></div>
       <div class="fg"><label>Type</label>
         <select id="t-type">
-          <option>Editing</option><option>QC Review</option><option>Script writing</option>
-          <option>Shoot planning</option><option>Shoot execution</option><option>Caption writing</option>
-          <option>Uploading</option><option>Client approval</option><option>Revision</option>
-          <option>Posting</option><option>Content strategy</option>
+          <optgroup label="🎬 Video Content (auto-adds to Pipeline)">
+            <option>Reel</option>
+            <option>Promo Video</option>
+            <option>Talking Head Video</option>
+            <option>Ad Video</option>
+            <option>Content Video</option>
+            <option>YouTube Video</option>
+            <option>Short Video</option>
+          </optgroup>
+          <optgroup label="📋 Other Tasks">
+            <option>Editing</option><option>QC Review</option><option>Script writing</option>
+            <option>Shoot planning</option><option>Shoot execution</option><option>Caption writing</option>
+            <option>Uploading</option><option>Client approval</option><option>Revision</option>
+            <option>Posting</option><option>Content strategy</option>
+          </optgroup>
         </select>
       </div>
       <div class="fg"><label>Owner</label>
-        <select id="t-owner">
-          <option>Minhaaj</option><option>Bharath</option><option>Gowtham</option><option>Bava</option><option>Shanju</option>
-        </select>
+        <select id="t-owner"></select>
       </div>
       <div class="fg"><label>Deadline</label><input type="date" id="t-deadline"></div>
       <div class="fg"><label>Status</label>
         <select id="t-status">
-          <option>Not started</option><option>In progress</option><option>Waiting for review</option>
-          <option>Waiting for input</option><option>Changes needed</option><option>Approved</option>
-          <option>Delayed</option><option>Posted</option>
+          <option>Active</option>
+          <option>Sent for Caption</option>
+          <option>Exported</option>
         </select>
       </div>
       <div class="fg"><label>Priority</label>
@@ -522,6 +607,9 @@
     <div class="fg"><label>Caption Status</label>
       <select id="po-cap"><option>Pending</option><option>Draft Ready</option><option>Approved</option></select>
     </div>
+    <div class="fg"><label>Assign Editor</label>
+      <select id="po-editor"><option value="">— Unassigned —</option></select>
+    </div>
     <div class="fg"><label>Notes</label><textarea id="po-notes" placeholder="Hashtags, timing, special instructions..."></textarea></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-post')">Cancel</button>
@@ -530,23 +618,30 @@
   </div>
 </div>
 
-<!-- Add Pipeline Client -->
+<!-- Add Pipeline Content Item -->
 <div class="modal-overlay" id="modal-pipeline">
   <div class="modal">
-    <div class="modal-title">🚀 Add Pipeline Client</div>
+    <div class="modal-title">🚀 Add Content to Pipeline</div>
     <div class="form-grid">
       <div class="fg"><label>Client</label><input id="pl-client" placeholder="e.g. Ramraj"></div>
-      <div class="fg"><label>Posts Planned This Week</label><input type="number" id="pl-planned" value="2" min="1"></div>
+      <div class="fg"><label>Content Title</label><input id="pl-content-title" placeholder="e.g. Founder Story Reel"></div>
+      <div class="fg"><label>Platform</label>
+        <select id="pl-platform">
+          <option>Instagram</option><option>YouTube</option><option>Facebook</option><option>LinkedIn</option><option>Multiple</option>
+        </select>
+      </div>
+      <div class="fg"><label>Planned Post Date</label><input type="date" id="pl-planned-date"></div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="pl-shot">      Shot</label>
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="pl-edit">      Edit</label>
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="pl-qc">        QC</label>
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="pl-approved">  Approved</label>
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="pl-caption">   Caption</label>
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="pl-scheduled"> Scheduled</label>
+    <div class="fg"><label>Current Status</label>
+      <select id="pl-content-status">
+        <option>Planned</option><option>Script Ready</option>
+        <option>Shot Pending</option><option>Shot Done</option>
+        <option>Edit Pending</option><option>Edit Done</option>
+        <option>QC Pending</option><option>QC Done</option>
+        <option>Approval Pending</option><option>Approved</option>
+        <option>Caption Ready</option><option>Scheduled</option><option>Posted</option>
+      </select>
     </div>
-    <div class="fg"><label>Posts Already Posted</label><input type="number" id="pl-posted" value="0" min="0"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-pipeline')">Cancel</button>
       <button class="btn btn-primary" onclick="savePipeline()">Save</button>
