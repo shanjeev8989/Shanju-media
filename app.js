@@ -1693,8 +1693,9 @@ function renderFollowupDash() {
   // Manual follow-ups due today
   const manualToday = clientFollowups.filter(f => f.manual_date === todayStr);
 
-  // Auto 6-day upcoming (next 3 days)
+  // Auto 6-day upcoming (next 3 days) — skip clients that have a manual date set
   const upcoming = clientFollowups
+    .filter(f => !f.manual_date)
     .map(f => ({ ...f, next: getNextReminder(f.shoot_date) }))
     .filter(f => f.next && f.next <= in3)
     .sort((a, b) => a.next - b.next);
