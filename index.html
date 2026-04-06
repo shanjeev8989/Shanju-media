@@ -111,11 +111,13 @@
     <div class="nav-section">Overview</div>
     <div class="nav-item active" onclick="nav('dashboard',this)"><span class="nav-icon">🏠</span> Dashboard</div>
     <div class="nav-item"        onclick="nav('my-tasks',this)"><span class="nav-icon">✅</span> My Tasks</div>
+    <div class="nav-item"        onclick="nav('daily-update',this)"><span class="nav-icon">📝</span> Daily Update</div>
 
     <div class="nav-section" data-section="work">Work</div>
     <div class="nav-item" data-section="work" onclick="nav('all-tasks',this)"><span class="nav-icon">📋</span> All Tasks</div>
     <div class="nav-item" data-section="work" onclick="nav('kanban',this)">   <span class="nav-icon">🗂️</span> Kanban Board</div>
     <div class="nav-item" data-section="work" onclick="nav('team',this)">     <span class="nav-icon">👥</span> Team View</div>
+    <div class="nav-item" data-section="work" onclick="nav('team-daily',this)"><span class="nav-icon">📊</span> Team Daily</div>
 
     <div class="nav-section" data-section="planning">Planning</div>
     <div class="nav-item" data-section="planning" onclick="nav('shoot-cal',this)"><span class="nav-icon">📷</span> Shoot Calendar</div>
@@ -567,6 +569,37 @@
           </table>
         </div>
       </div>
+    </div>
+
+    <!-- =====================================================
+         DAILY UPDATE PAGE (all members)
+         ===================================================== -->
+    <div class="page" id="page-daily-update">
+      <div class="topbar">
+        <div>
+          <div class="page-title">📝 Daily Update</div>
+          <div class="page-sub" id="daily-sub">Your 5-minute daily plan</div>
+        </div>
+      </div>
+      <div id="daily-update-body"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+    </div>
+
+    <!-- =====================================================
+         TEAM DAILY PAGE (manager / owner only)
+         ===================================================== -->
+    <div class="page" id="page-team-daily">
+      <div class="topbar">
+        <div>
+          <div class="page-title">📊 Team Daily</div>
+          <div class="page-sub">Daily planning &amp; accountability</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="btn btn-sm" onclick="teamDailyPrev()">&#9664;</button>
+          <span id="team-daily-label" style="font-size:13px;font-weight:600;min-width:160px;text-align:center;"></span>
+          <button class="btn btn-sm" onclick="teamDailyNext()">&#9654;</button>
+        </div>
+      </div>
+      <div id="team-daily-body"><div class="loading"><div class="spinner"></div>Loading...</div></div>
     </div>
 
   </div><!-- end content -->

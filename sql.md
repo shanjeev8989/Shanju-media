@@ -1,3 +1,25 @@
+## Step 9 — Daily Update table (run after Step 8)
+
+```sql
+CREATE TABLE IF NOT EXISTS daily_updates (
+  id            uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at    timestamptz DEFAULT now(),
+  member_name   text NOT NULL,
+  update_date   date NOT NULL DEFAULT CURRENT_DATE,
+  before_lunch  jsonb DEFAULT '[]',
+  after_lunch   jsonb DEFAULT '[]',
+  morning_done  boolean DEFAULT false,
+  eod_done      boolean DEFAULT false,
+  UNIQUE(member_name, update_date)
+);
+
+ALTER TABLE daily_updates ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "auth_all" ON daily_updates;
+CREATE POLICY "auth_all" ON daily_updates FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+```
+
+---
+
 ## Step 8 — Client Follow-Up tables (run after Step 7)
 
 ```sql

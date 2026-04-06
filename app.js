@@ -27,6 +27,8 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let tasks = [], shoots = [], posts = [], pipeline = [], payments = [], invoices = [];
 let clientFollowups = [], clientReviews = [];
+let dailyUpdates = [];
+let teamDailyViewDate = new Date().toISOString().split('T')[0];
 let teamProfiles = []; // all approved profiles — used for editor dropdown
 let currentUser = 'Shanju';
 let currentProfile = null; // { id, name, role }  — set after login
@@ -104,6 +106,15 @@ async function loadAll(silent = false) {
       if (!cr.error) clientReviews   = cr.data || [];
     } catch (e2) {
       // tables not created yet — silently skip
+    }
+
+    // Daily updates — last 7 days
+    try {
+      const sevenAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+      const { data: du, error: duErr } = await sb.from('daily_updates').select('*').gte('update_date', sevenAgo);
+      if (!duErr) dailyUpdates = du || [];
+    } catch (e3) {
+      dailyUpdates = [];
     }
     populateEditorDropdown();
     populateTeamDropdowns();
@@ -202,8 +213,8 @@ function nav(id, el) {
     toast('Access restricted — visible to Owner only.');
     return;
   }
-  // Work pages (All Tasks, Kanban, Team): owner and manager only
-  const workPages = ['all-tasks','kanban','team'];
+  // Work pages (All Tasks, Kanban, Team, Team Daily): owner and manager only
+  const workPages = ['all-tasks','kanban','team','team-daily'];
   if (workPages.includes(id) && role === 'editor') {
     toast('Access restricted.');
     return;
@@ -229,6 +240,8 @@ function renderPage(id) {
   else if (id === 'payments')        renderPayments();
   else if (id === 'invoices')        renderInvoices();
   else if (id === 'client-followup') renderClientFollowup();
+  else if (id === 'daily-update')    renderDailyUpdate();
+  else if (id === 'team-daily')      renderTeamDaily();
 }
 
 function switchUser() {
@@ -1826,7 +1839,261 @@ async function deleteReview(id) {
 }
 
 
-// ---- 17. REALTIME + INIT ----
+// ---- 17. DAILY UPDATE ----
+
+function renderDailyUpdate() {
+  const todayStr  = new Date().toISOString().split('T')[0];
+  const yesterStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+  const todayRec  = dailyUpdates.find(d => d.member_name === currentUser && d.update_date === todayStr);
+  const yesterRec = dailyUpdates.find(d => d.member_name === currentUser && d.update_date === yesterStr);
+
+  const dateLabel = new Date(todayStr + 'T00:00:00').toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long' });
+  document.getElementById('daily-sub').textContent = dateLabel;
+
+  // Carry-overs: tasks from yesterday that weren't completed
+  const carryovers = [];
+  if (yesterRec) {
+    [...(yesterRec.before_lunch||[]), ...(yesterRec.after_lunch||[])].forEach(t => {
+      if (t.status !== 'completed') carryovers.push(t.task);
+    });
+  }
+
+  let html = '';
+
+  if (!todayRec || !todayRec.morning_done) {
+    // Morning plan form
+    const carryHtml = carryovers.length ? `
+      <div style="margin-bottom:16px;background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:12px;">
+        <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:8px;">⚠ Carry-Over from Yesterday — Include if still pending</div>
+        ${carryovers.map(t => `<div style="font-size:13px;padding:3px 0;color:#78350f;">• ${t}</div>`).join('')}
+      </div>` : '';
+
+    html = `
+      <div class="card" style="border:2px solid var(--p400);">
+        <div class="card-header">
+          <span class="card-title">🌅 Morning Plan <span style="font-size:12px;color:var(--muted);font-weight:400;">(fill within 5 minutes of starting work)</span></span>
+          <span class="pill pill-warning">Not submitted</span>
+        </div>
+        <div class="card-body">
+          ${carryHtml}
+          <div class="form-grid">
+            <div class="fg">
+              <label>Before Lunch — Tasks</label>
+              <textarea id="du-before" rows="5" placeholder="One task per line&#10;e.g. Edit Ramraj reel&#10;QC Gowtham footage&#10;Upload YouTube Short" style="font-size:13px;"></textarea>
+            </div>
+            <div class="fg">
+              <label>After Lunch — Tasks</label>
+              <textarea id="du-after" rows="5" placeholder="One task per line&#10;e.g. Caption 3 posts&#10;Export final video&#10;Send for QC" style="font-size:13px;"></textarea>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="saveMorningPlan()" style="margin-top:4px;">Submit Morning Plan</button>
+        </div>
+      </div>`;
+  } else {
+    // Plan submitted — show tasks with EOD dropdowns
+    const before = todayRec.before_lunch || [];
+    const after  = todayRec.after_lunch  || [];
+
+    const eodDoneComp  = [...before,...after].filter(t => t.status === 'completed').length;
+    const eodDoneTotal = before.length + after.length;
+
+    const taskRow = (t, section, idx) => {
+      const showReason = t.status === 'not_done' || t.status === 'in_progress';
+      return `<div style="padding:8px 0;border-bottom:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div style="flex:1;font-size:13px;font-weight:500;min-width:120px;">${t.task}</div>
+          <select id="eod-status-${section}-${idx}" onchange="onEodStatusChange('${section}',${idx})"
+            style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);">
+            <option value="">— Status —</option>
+            <option value="completed"  ${t.status==='completed' ?'selected':''}>✅ Completed</option>
+            <option value="in_progress"${t.status==='in_progress'?'selected':''}>🔄 In Progress</option>
+            <option value="not_done"   ${t.status==='not_done'  ?'selected':''}>❌ Not Done</option>
+          </select>
+        </div>
+        <div id="eod-reason-wrap-${section}-${idx}" style="display:${showReason?'block':'none'};margin-top:6px;">
+          <input type="text" id="eod-reason-${section}-${idx}" value="${t.reason||''}"
+            placeholder="Reason (required if not done / in progress)"
+            style="width:100%;font-size:12px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);box-sizing:border-box;">
+        </div>
+      </div>`;
+    };
+
+    html = `
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🌅 Today's Plan</span>
+          <span class="pill pill-success">Morning plan submitted ✓</span>
+        </div>
+        <div class="card-body">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Before Lunch</div>
+          ${before.length ? before.map((t,i) => taskRow(t,'before',i)).join('') : '<div class="empty-state" style="margin:8px 0;">No tasks added</div>'}
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin:16px 0 4px;">After Lunch</div>
+          ${after.length ? after.map((t,i) => taskRow(t,'after',i)).join('') : '<div class="empty-state" style="margin:8px 0;">No tasks added</div>'}
+          <div style="margin-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="saveEodUpdate()">Save EOD Update</button>
+            ${todayRec.eod_done ? `<span class="pill pill-success">EOD update saved — ${eodDoneComp}/${eodDoneTotal} completed</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  document.getElementById('daily-update-body').innerHTML = html;
+}
+
+function onEodStatusChange(section, idx) {
+  const val  = document.getElementById(`eod-status-${section}-${idx}`)?.value;
+  const wrap = document.getElementById(`eod-reason-wrap-${section}-${idx}`);
+  if (wrap) wrap.style.display = (val === 'not_done' || val === 'in_progress') ? 'block' : 'none';
+}
+
+async function saveMorningPlan() {
+  const before = (document.getElementById('du-before')?.value || '')
+    .split('\n').map(s => s.trim()).filter(Boolean).map(task => ({ task, status:'', reason:'' }));
+  const after  = (document.getElementById('du-after')?.value || '')
+    .split('\n').map(s => s.trim()).filter(Boolean).map(task => ({ task, status:'', reason:'' }));
+
+  if (!before.length && !after.length) { toast('Add at least one task.'); return; }
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const row = { member_name: currentUser, update_date: todayStr, before_lunch: before, after_lunch: after, morning_done: true, eod_done: false };
+
+  setSyncing(); _markLocalWrite();
+  const { data, error } = await sb.from('daily_updates').upsert([row], { onConflict: 'member_name,update_date' }).select();
+  if (error) { setSyncError(); toast('Save failed: ' + error.message); return; }
+  setSynced(); toast('Morning plan saved!');
+
+  const idx = dailyUpdates.findIndex(d => d.member_name === currentUser && d.update_date === todayStr);
+  if (idx >= 0) dailyUpdates[idx] = data[0]; else dailyUpdates.push(data[0]);
+  renderDailyUpdate();
+}
+
+async function saveEodUpdate() {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const rec = dailyUpdates.find(d => d.member_name === currentUser && d.update_date === todayStr);
+  if (!rec) return;
+
+  const collect = (tasks, section) => tasks.map((t, i) => ({
+    task:   t.task,
+    status: document.getElementById(`eod-status-${section}-${i}`)?.value || t.status || '',
+    reason: document.getElementById(`eod-reason-${section}-${i}`)?.value || t.reason || '',
+  }));
+
+  const before = collect(rec.before_lunch || [], 'before');
+  const after  = collect(rec.after_lunch  || [], 'after');
+
+  const ok = await dbUpdate('daily_updates', rec.id, { before_lunch: before, after_lunch: after, eod_done: true });
+  if (ok) {
+    const idx = dailyUpdates.findIndex(d => d.id === rec.id);
+    dailyUpdates[idx] = { ...rec, before_lunch: before, after_lunch: after, eod_done: true };
+    toast('EOD update saved!');
+    renderDailyUpdate();
+  }
+}
+
+// ---- TEAM DAILY ----
+
+function teamDailyPrev() {
+  const d = new Date(teamDailyViewDate + 'T00:00:00'); d.setDate(d.getDate() - 1);
+  teamDailyViewDate = d.toISOString().split('T')[0]; renderTeamDaily();
+}
+function teamDailyNext() {
+  const d = new Date(teamDailyViewDate + 'T00:00:00'); d.setDate(d.getDate() + 1);
+  teamDailyViewDate = d.toISOString().split('T')[0]; renderTeamDaily();
+}
+
+async function renderTeamDaily() {
+  const label = new Date(teamDailyViewDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  document.getElementById('team-daily-label').textContent = label;
+
+  // Fetch records for this date fresh from DB
+  const { data } = await sb.from('daily_updates').select('*').eq('update_date', teamDailyViewDate);
+  const records = data || [];
+
+  const members = teamProfiles.filter(p => p.role !== 'owner').map(p => p.name);
+  if (!members.length) {
+    document.getElementById('team-daily-body').innerHTML = '<div class="empty-state">No team members yet.</div>';
+    return;
+  }
+
+  function statusIcon(s) {
+    if (s === 'completed')  return '✅';
+    if (s === 'in_progress') return '🔄';
+    if (s === 'not_done')   return '❌';
+    return '<span style="color:var(--muted);">⏳</span>';
+  }
+
+  const rows = members.map(name => {
+    const rec = records.find(r => r.member_name === name);
+    const safeId = name.replace(/\s+/g,'_');
+
+    if (!rec || !rec.morning_done) {
+      return `<tr>
+        <td style="font-weight:600;">${name}</td>
+        <td><span class="pill pill-danger">Not filed</span></td>
+        <td colspan="6" style="color:var(--muted);font-size:12px;">No morning plan submitted</td>
+      </tr>`;
+    }
+
+    const before = rec.before_lunch || [];
+    const after  = rec.after_lunch  || [];
+    const all    = [...before, ...after];
+    const comp   = all.filter(t => t.status === 'completed').length;
+    const inprog = all.filter(t => t.status === 'in_progress').length;
+    const notdone= all.filter(t => t.status === 'not_done').length;
+
+    const detailHtml = `
+      <tr id="detail-${safeId}" style="display:none;background:var(--bg);">
+        <td colspan="8" style="padding:12px 16px;">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Before Lunch</div>
+          ${before.map(t => `<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:13px;">
+            <span>${statusIcon(t.status)}</span>
+            <span style="flex:1;">${t.task}</span>
+            ${t.reason ? `<span style="font-size:11px;color:var(--muted);font-style:italic;">← ${t.reason}</span>` : ''}
+          </div>`).join('') || '<div style="color:var(--muted);font-size:12px;">None</div>'}
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin:12px 0 6px;">After Lunch</div>
+          ${after.map(t => `<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:13px;">
+            <span>${statusIcon(t.status)}</span>
+            <span style="flex:1;">${t.task}</span>
+            ${t.reason ? `<span style="font-size:11px;color:var(--muted);font-style:italic;">← ${t.reason}</span>` : ''}
+          </div>`).join('') || '<div style="color:var(--muted);font-size:12px;">None</div>'}
+        </td>
+      </tr>`;
+
+    return `<tr onclick="toggleDailyDetail('${safeId}')" style="cursor:pointer;">
+      <td style="font-weight:600;">${name}</td>
+      <td><span class="pill pill-success">Filed ✓</span></td>
+      <td>${before.length}</td>
+      <td>${after.length}</td>
+      <td style="color:var(--success);font-weight:700;">${comp}</td>
+      <td style="color:var(--warning);font-weight:700;">${inprog}</td>
+      <td style="color:var(--danger);font-weight:700;">${notdone}</td>
+      <td>${rec.eod_done ? '<span class="pill pill-success">Done</span>' : '<span class="pill pill-neutral">Pending</span>'}</td>
+    </tr>${detailHtml}`;
+  }).join('');
+
+  document.getElementById('team-daily-body').innerHTML = `
+    <div class="card">
+      <div class="card-body" style="padding:0;overflow-x:auto;">
+        <table class="tbl">
+          <thead><tr>
+            <th>Member</th><th>Filed?</th><th>Before Lunch</th><th>After Lunch</th>
+            <th>✅ Done</th><th>🔄 In Progress</th><th>❌ Not Done</th><th>EOD</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="padding:10px 16px;font-size:12px;color:var(--muted);">Click a row to see task details.</div>
+    </div>`;
+}
+
+function toggleDailyDetail(safeId) {
+  const row = document.getElementById('detail-' + safeId);
+  if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+}
+
+
+// ---- 18. REALTIME + INIT ----
 let _realtimeTimer = null;
 let _tabWasHidden  = false;
 
