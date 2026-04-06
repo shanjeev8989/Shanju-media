@@ -88,14 +88,23 @@ async function loadAll(silent = false) {
       sb.from('payments').select('*').order('created_at', { ascending: false }),
       sb.from('invoices').select('*').order('created_at', { ascending: false }),
       sb.from('profiles').select('*').eq('status', 'approved'),
-      sb.from('client_followups').select('*').order('shoot_date'),
-      sb.from('client_reviews').select('*').order('review_date', { ascending: false }),
     ];
-    const [t, s, p, pl, pay, inv, prof, cf, cr] = await Promise.all(queries);
+    const [t, s, p, pl, pay, inv, prof] = await Promise.all(queries);
     tasks = t.data || []; shoots = s.data || []; posts = p.data || [];
     pipeline = pl.data || []; payments = pay.data || []; invoices = inv.data || [];
     teamProfiles = prof.data || [];
-    clientFollowups = cf.data || []; clientReviews = cr.data || [];
+
+    // Follow-up tables may not exist yet — fail gracefully if SQL Step 8 not run
+    try {
+      const [cf, cr] = await Promise.all([
+        sb.from('client_followups').select('*').order('shoot_date'),
+        sb.from('client_reviews').select('*').order('review_date', { ascending: false }),
+      ]);
+      if (!cf.error) clientFollowups = cf.data || [];
+      if (!cr.error) clientReviews   = cr.data || [];
+    } catch (e2) {
+      // tables not created yet — silently skip
+    }
     populateEditorDropdown();
     populateTeamDropdowns();
 
@@ -1748,7 +1757,7 @@ function renderFollowupDash() {
     html += '</div>';
   }
 
-  if (!upcoming.length && !negLastMonth.length && !recent.length) {
+  if (!manualToday.length && !upcoming.length && !negLastMonth.length && !recent.length) {
     html = `<div class="empty-state">No follow-ups yet. <span style="color:var(--p700);cursor:pointer;" onclick="nav('client-followup',null)">Add clients →</span></div>`;
   }
 
