@@ -128,6 +128,9 @@ async function loadAll(silent = false) {
     if (!silent) {
       renderPage(document.querySelector('.page.active')?.id.replace('page-', ''));
       updatePayNotif();
+    } else {
+      // Silent background reload: refresh dashboard counts only (no dropdown rebuild, no full page re-render)
+      renderDash();
     }
   } catch (e) {
     setSyncError();
