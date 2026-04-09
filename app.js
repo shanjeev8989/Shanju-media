@@ -2342,7 +2342,7 @@ function getMemberStats(name) {
 }
 
 function renderPerformance() {
-  const members = teamProfiles.filter(p => p.role !== 'owner').map(p => p.name);
+  const members = teamProfiles.filter(p => p.role === 'editor').map(p => p.name);
   if (!members.length) {
     document.getElementById('performance-body').innerHTML = '<div class="empty-state">No team members yet.</div>';
     return;
