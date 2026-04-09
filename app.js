@@ -552,12 +552,7 @@ function renderDash() {
 
   let m = '';
   if (isOwner) {
-    m = `<div class="mcard purple"><div class="mcard-label">Active Tasks</div><div class="mcard-val">${allActive.length}</div><div class="mcard-sub">All clients</div></div>
-    <div class="mcard danger"><div class="mcard-label">Overdue</div><div class="mcard-val">${allActive.filter(t => daysDiff(t.deadline) < 0).length}</div></div>
-    <div class="mcard warning"><div class="mcard-label">Due Today</div><div class="mcard-val">${allActive.filter(t => daysDiff(t.deadline) === 0).length}</div></div>
-    <div class="mcard info"><div class="mcard-label">Sent for Caption</div><div class="mcard-val">${allActive.filter(t => t.status === 'Sent for Caption').length}</div></div>
-    <div class="mcard danger"><div class="mcard-label">Pending Payments</div><div class="mcard-val">${pendingPay.length}</div><div class="mcard-sub">${fmtMoney(pendingAmt)}</div></div>
-    <div class="mcard success"><div class="mcard-label">Clients</div><div class="mcard-val">${[...new Set(tasks.map(t => t.client))].length}</div></div>`;
+    m = '';
   } else if (role === 'manager') {
     // For manager: Active Tasks excludes caption queue items (those are a separate workflow)
     const mgrActive   = allActive.filter(t => t.status !== 'Sent for Caption');
