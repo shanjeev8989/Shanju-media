@@ -94,9 +94,13 @@ async function loadAll(silent = false) {
       sb.from('profiles').select('*').eq('status', 'approved'),
     ];
     const [t, s, p, pl, pay, inv, prof] = await Promise.all(queries);
-    tasks = t.data || []; shoots = s.data || []; posts = p.data || [];
-    pipeline = pl.data || []; payments = pay.data || []; invoices = inv.data || [];
-    teamProfiles = prof.data || [];
+    if (!t.error)    tasks        = t.data    || [];
+    if (!s.error)    shoots       = s.data    || [];
+    if (!p.error)    posts        = p.data    || [];
+    if (!pl.error)   pipeline     = pl.data   || [];
+    if (!pay.error)  payments     = pay.data  || [];
+    if (!inv.error)  invoices     = inv.data  || [];
+    if (!prof.error) teamProfiles = prof.data || [];
 
     // Follow-up tables may not exist yet — fail gracefully if SQL Step 8 not run
     try {
