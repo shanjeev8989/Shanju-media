@@ -574,6 +574,64 @@ function renderDash() {
   }
   document.getElementById('dash-metrics').innerHTML = m;
 
+  // ---- Founder Today Overview ----
+  const founderTodaySection = document.getElementById('founder-today-section');
+  if (founderTodaySection) founderTodaySection.style.display = isOwner ? 'block' : 'none';
+
+  if (isOwner) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const editors  = teamProfiles.filter(p => p.role === 'editor').map(p => p.name);
+
+    // 1. Editor tasks today (active tasks owned by editors)
+    const editorTasks = allActive.filter(t => editors.some(e => e.trim().toLowerCase() === (t.owner||'').trim().toLowerCase()));
+    const editorTasksEl    = document.getElementById('dash-editor-tasks');
+    const editorTasksCount = document.getElementById('dash-editor-tasks-count');
+    if (editorTasksCount) editorTasksCount.textContent = editorTasks.length ? `${editorTasks.length} tasks` : '';
+    if (editorTasksEl) editorTasksEl.innerHTML = editorTasks.length
+      ? editorTasks.map(t => `
+          <div style="padding:9px 14px;border-bottom:1px solid var(--border);">
+            <div style="font-size:13px;font-weight:600;">${t.owner} — ${t.name || t.client}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">${t.client} · ${statusPill(t.status)}</div>
+          </div>`).join('')
+      : '<div class="empty-state" style="padding:14px;">No active editor tasks.</div>';
+
+    // 2. Due today — all tasks across team
+    const dueTodayAll = allActive.filter(t => daysDiff(t.deadline) === 0);
+    const dueTodayEl    = document.getElementById('dash-due-today');
+    const dueTodayCount = document.getElementById('dash-due-today-count');
+    if (dueTodayCount) dueTodayCount.textContent = dueTodayAll.length ? `${dueTodayAll.length}` : '';
+    if (dueTodayEl) dueTodayEl.innerHTML = dueTodayAll.length
+      ? dueTodayAll.map(t => `
+          <div style="padding:9px 14px;border-bottom:1px solid var(--border);">
+            <div style="font-size:13px;font-weight:600;">${t.name || t.client}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">${t.client} · ${t.owner || '—'} · ${statusPill(t.status)}</div>
+          </div>`).join('')
+      : '<div class="empty-state" style="padding:14px;">Nothing due today 🎉</div>';
+
+    // 3. Today's posts — from Post Calendar, show export status
+    const todayPostsAll = posts.filter(p => p.date === todayStr);
+    const todayPostsEl    = document.getElementById('dash-today-posts');
+    const todayPostsCount = document.getElementById('dash-today-posts-count');
+    if (todayPostsCount) todayPostsCount.textContent = todayPostsAll.length ? `${todayPostsAll.length} posts` : '';
+    if (todayPostsEl) todayPostsEl.innerHTML = todayPostsAll.length
+      ? todayPostsAll.map(p => {
+          const exported = p.caption_status === 'Exported';
+          const dot = exported ? 'adot-green' : 'adot-yellow';
+          const badge = exported
+            ? '<span class="pill pill-success" style="font-size:10px;">Exported ✓</span>'
+            : `<span class="pill pill-warning" style="font-size:10px;">${p.caption_status || 'Not Started'}</span>`;
+          return `<div style="padding:9px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+            <div class="adot ${dot}" style="flex-shrink:0;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:600;">${p.client}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px;">${p.platform || '—'} · ${p.content_type || '—'}${p.assigned_editor ? ' · ' + p.assigned_editor : ''}</div>
+            </div>
+            ${badge}
+          </div>`;
+        }).join('')
+      : '<div class="empty-state" style="padding:14px;">No posts scheduled today.</div>';
+  }
+
   // Build combined items (tasks + posts) for urgent/focus sections
   const dashTaskSrc = isOwner ? allActive : myActive;
   const dashPostSrc = isOwner ? posts : myPosts;
