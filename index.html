@@ -127,6 +127,7 @@
 
     <div class="nav-section" data-section="founder">Founder</div>
     <div class="nav-item" data-section="founder" onclick="nav('founder-panel',this)"><span class="nav-icon">⚡</span> Command Panel</div>
+    <div class="nav-item" data-section="founder" onclick="nav('ideas',this)"><span class="nav-icon">💡</span> Ideas</div>
     <div class="nav-item" data-section="founder" onclick="nav('client-followup',this)"><span class="nav-icon">🤝</span> Client Follow-Up</div>
     <div class="nav-item" data-section="founder" onclick="nav('performance',this)"><span class="nav-icon">🏆</span> Performance</div>
 
@@ -1054,8 +1055,139 @@
   </div>
 </div>
 
+<!-- =====================================================
+     IDEAS PAGE (founder only)
+     ===================================================== -->
+<div class="page" id="page-ideas">
+  <div class="topbar">
+    <div>
+      <div class="page-title">💡 Ideas</div>
+      <div class="page-sub">Capture, organize and execute your content ideas</div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="openAddIdea()">+ New Idea</button>
+  </div>
+
+  <!-- Metrics -->
+  <div class="metric-grid" id="idea-metrics" style="margin-bottom:16px;"></div>
+
+  <!-- Quick Add -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-body" style="padding:12px;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-size:18px;">💡</span>
+        <input id="idea-quick-title" type="text" placeholder="Quick idea... press Enter to capture"
+          style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);font-size:13px;background:var(--w);"
+          onkeydown="if(event.key==='Enter') quickAddIdea()">
+        <button class="btn btn-primary btn-sm" onclick="quickAddIdea()">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Tabs + Filters -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="idea-tabs">
+        <button class="btn btn-sm btn-primary" onclick="setIdeaView('all',this)">All Ideas</button>
+        <button class="btn btn-sm" onclick="setIdeaView('kanban',this)">🗂 Kanban</button>
+        <button class="btn btn-sm" onclick="setIdeaView('brand',this)">By Brand</button>
+        <button class="btn btn-sm" onclick="setIdeaView('type',this)">By Type</button>
+        <button class="btn btn-sm" onclick="setIdeaView('category',this)">By Category</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <select id="idea-filter-brand" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);"><option value="">All Brands</option></select>
+        <select id="idea-filter-type" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);">
+          <option value="">All Types</option><option>Short Form</option><option>Long Form</option>
+        </select>
+        <select id="idea-filter-category" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);"><option value="">All Categories</option></select>
+        <select id="idea-filter-status" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);"><option value="">All Status</option></select>
+        <select id="idea-filter-priority" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);">
+          <option value="">All Priority</option><option>High</option><option>Medium</option><option>Low</option>
+        </select>
+        <select id="idea-filter-exec" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);">
+          <option value="">All Execution</option><option value="Execute This Week">This Week</option><option value="Park for Later">Parked</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ideas Body -->
+  <div id="ideas-body"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+</div>
+
+<!-- =====================================================
+     IDEA MODAL
+     ===================================================== -->
+<div class="modal-overlay" id="modal-idea">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-title" id="modal-idea-title">💡 New Idea</div>
+    <div style="padding:20px;overflow-y:auto;max-height:70vh;">
+      <input type="hidden" id="idea-edit-id">
+      <div class="form-grid">
+        <div class="fg" style="grid-column:1/-1;">
+          <label>Title *</label>
+          <input type="text" id="idea-title" placeholder="What's the idea?">
+        </div>
+        <div class="fg" style="grid-column:1/-1;">
+          <label>Description</label>
+          <textarea id="idea-desc" rows="2" placeholder="Describe it briefly..."></textarea>
+        </div>
+        <div class="fg">
+          <label>Content Type</label>
+          <select id="idea-content-type"><option>Short Form</option><option>Long Form</option></select>
+        </div>
+        <div class="fg">
+          <label>Status</label>
+          <select id="idea-status"></select>
+        </div>
+        <div class="fg">
+          <label>Brand
+            <button type="button" onclick="addNewIdeaBrand()" style="margin-left:6px;font-size:10px;padding:1px 7px;border-radius:6px;border:1px solid var(--border);background:var(--w);cursor:pointer;">+ New</button>
+          </label>
+          <select id="idea-brand"></select>
+        </div>
+        <div class="fg">
+          <label>Category
+            <button type="button" onclick="addNewIdeaCategory()" style="margin-left:6px;font-size:10px;padding:1px 7px;border-radius:6px;border:1px solid var(--border);background:var(--w);cursor:pointer;">+ New</button>
+          </label>
+          <select id="idea-category"></select>
+        </div>
+        <div class="fg">
+          <label>Priority</label>
+          <select id="idea-priority"><option>High</option><option selected>Medium</option><option>Low</option></select>
+        </div>
+        <div class="fg">
+          <label>Execution</label>
+          <select id="idea-execution">
+            <option value="Execute This Week">🔥 Execute This Week</option>
+            <option value="Park for Later" selected>Park for Later</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Assign To</label>
+          <select id="idea-assign-to"></select>
+        </div>
+      </div>
+      <!-- Script / Shot List / References tabs -->
+      <div style="margin-top:16px;">
+        <div style="display:flex;gap:6px;margin-bottom:8px;" id="idea-attach-tabs">
+          <button class="btn btn-sm btn-primary" id="idea-attach-tab-script" onclick="switchIdeaTab('script')">📝 Script</button>
+          <button class="btn btn-sm" id="idea-attach-tab-shotlist" onclick="switchIdeaTab('shotlist')">🎬 Shot List</button>
+          <button class="btn btn-sm" id="idea-attach-tab-refs" onclick="switchIdeaTab('refs')">🔗 References</button>
+        </div>
+        <textarea id="idea-script"   rows="4" placeholder="Script or key points..." style="width:100%;box-sizing:border-box;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--w);"></textarea>
+        <textarea id="idea-shotlist" rows="4" placeholder="Shot list (one shot per line)..." style="width:100%;box-sizing:border-box;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--w);display:none;"></textarea>
+        <textarea id="idea-refs"     rows="4" placeholder="Reference links or notes..." style="width:100%;box-sizing:border-box;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--w);display:none;"></textarea>
+      </div>
+    </div>
+    <div style="padding:16px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--border);">
+      <button class="btn" onclick="closeModal('modal-idea')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveIdea()">Save Idea</button>
+    </div>
+  </div>
+</div>
+
 <script src="config.js"></script>
-<script src="app.js?v=11"></script>
+<script src="app.js?v=12"></script>
 
 </body>
 </html>

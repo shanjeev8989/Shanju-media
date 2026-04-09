@@ -29,6 +29,7 @@ let tasks = [], shoots = [], posts = [], pipeline = [], payments = [], invoices 
 let clientFollowups = [], clientReviews = [];
 let dailyUpdates = [];
 let expenses = [];
+let ideas = [];
 let teamDailyViewDate   = new Date().toISOString().split('T')[0];
 let dailyMonthView      = new Date().toISOString().slice(0, 7); // "YYYY-MM"
 let teamProfiles = []; // all approved profiles — used for editor dropdown
@@ -129,6 +130,11 @@ async function loadAll(silent = false) {
     } catch (e4) {
       expenses = [];
     }
+    // Ideas
+    try {
+      const { data: ideasData, error: ideasErr } = await sb.from('ideas').select('*').order('created_at', { ascending: false });
+      if (!ideasErr) ideas = ideasData || [];
+    } catch (e5) { ideas = []; }
     // Only rebuild dropdowns and check pending users on full loads (not silent background refreshes)
     if (!silent) {
       populateEditorDropdown();
@@ -146,6 +152,7 @@ async function loadAll(silent = false) {
       const silentActivePage = document.querySelector('.page.active')?.id.replace('page-', '');
       if (silentActivePage === 'expenses')  renderExpenses();
       if (silentActivePage === 'pipeline')  renderPipeline();
+      if (silentActivePage === 'ideas')     renderIdeas();
     }
   } catch (e) {
     setSyncError();
@@ -263,6 +270,7 @@ function renderPage(id) {
   else if (id === 'team-daily')      renderTeamDaily();
   else if (id === 'performance')     renderPerformance();
   else if (id === 'founder-panel')   renderFounderPanel();
+  else if (id === 'ideas')           renderIdeas();
   else if (id === 'expenses')        renderExpenses();
 }
 
@@ -3362,6 +3370,292 @@ function renderExpenses() {
         </div>`;
       }).join('')
     : '<div class="empty-state">No expenses found.</div>';
+}
+
+
+// ---- 20. IDEAS ----
+
+const IDEA_STATUSES   = ['Not Started','In Progress','Shot Planned','Shot Done','Editing','Completed'];
+const IDEA_PRIORITIES = ['High','Medium','Low'];
+const IDEA_STATUS_COLORS = {
+  'Not Started':'#94a3b8','In Progress':'#f59e0b','Shot Planned':'#3b82f6',
+  'Shot Done':'#8b5cf6','Editing':'#ec4899','Completed':'#10b981'
+};
+let _ideaView = 'all';
+
+function getIdeaBrands() {
+  try { return JSON.parse(localStorage.getItem('ideaBrands')) || ['Athigai','Shas','Archana','Vivaash']; }
+  catch(e) { return ['Athigai','Shas','Archana','Vivaash']; }
+}
+function saveIdeaBrands(arr) { localStorage.setItem('ideaBrands', JSON.stringify(arr)); }
+function getIdeaCategories() {
+  try { return JSON.parse(localStorage.getItem('ideaCategories')) || ['Storytelling','Product-based','Emotional','Comedy','Trend-based','Educational']; }
+  catch(e) { return ['Storytelling','Product-based','Emotional','Comedy','Trend-based','Educational']; }
+}
+function saveIdeaCategories(arr) { localStorage.setItem('ideaCategories', JSON.stringify(arr)); }
+
+function setIdeaView(view, el) {
+  _ideaView = view;
+  document.querySelectorAll('#idea-tabs .btn').forEach(b => b.classList.remove('btn-primary'));
+  if (el) el.classList.add('btn-primary');
+  renderIdeas();
+}
+
+function renderIdeas() {
+  const brands     = getIdeaBrands();
+  const categories = getIdeaCategories();
+
+  // Populate filter dropdowns
+  const bFilter = document.getElementById('idea-filter-brand');
+  if (bFilter) { const c=bFilter.value; bFilter.innerHTML='<option value="">All Brands</option>'+brands.map(b=>`<option ${b===c?'selected':''}>${b}</option>`).join(''); }
+  const cFilter = document.getElementById('idea-filter-category');
+  if (cFilter) { const c=cFilter.value; cFilter.innerHTML='<option value="">All Categories</option>'+categories.map(x=>`<option ${x===c?'selected':''}>${x}</option>`).join(''); }
+  const sFilter = document.getElementById('idea-filter-status');
+  if (sFilter) { const c=sFilter.value; sFilter.innerHTML='<option value="">All Status</option>'+IDEA_STATUSES.map(s=>`<option ${s===c?'selected':''}>${s}</option>`).join(''); }
+
+  // Apply filters
+  const fBrand    = document.getElementById('idea-filter-brand')?.value    || '';
+  const fType     = document.getElementById('idea-filter-type')?.value     || '';
+  const fCat      = document.getElementById('idea-filter-category')?.value || '';
+  const fStatus   = document.getElementById('idea-filter-status')?.value   || '';
+  const fPriority = document.getElementById('idea-filter-priority')?.value || '';
+  const fExec     = document.getElementById('idea-filter-exec')?.value     || '';
+
+  const filtered = ideas.filter(i =>
+    (!fBrand    || i.brand        === fBrand)    &&
+    (!fType     || i.content_type === fType)     &&
+    (!fCat      || i.category     === fCat)      &&
+    (!fStatus   || i.status       === fStatus)   &&
+    (!fPriority || i.priority     === fPriority) &&
+    (!fExec     || i.execution_flag === fExec)
+  );
+
+  // Metrics
+  const mEl = document.getElementById('idea-metrics');
+  if (mEl) {
+    const thisWeek = ideas.filter(i=>i.execution_flag==='Execute This Week').length;
+    const brandsM  = [...new Set(ideas.map(i=>i.brand).filter(Boolean))];
+    mEl.innerHTML = `
+      <div class="mcard purple"><div class="mcard-label">Total Ideas</div><div class="mcard-val">${ideas.length}</div></div>
+      <div class="mcard info"><div class="mcard-label">Active</div><div class="mcard-val">${ideas.filter(i=>i.status!=='Completed').length}</div></div>
+      <div class="mcard warning"><div class="mcard-label">This Week</div><div class="mcard-val">${thisWeek}</div></div>
+      <div class="mcard success"><div class="mcard-label">Completed</div><div class="mcard-val">${ideas.filter(i=>i.status==='Completed').length}</div></div>
+      ${brandsM.slice(0,4).map(b=>`<div class="mcard"><div class="mcard-label">${b}</div><div class="mcard-val">${ideas.filter(i=>i.brand===b).length}</div></div>`).join('')}`;
+  }
+
+  const body = document.getElementById('ideas-body');
+  if (!body) return;
+  if (_ideaView === 'kanban')   body.innerHTML = _renderIdeaKanban(filtered);
+  else if (_ideaView === 'brand')    body.innerHTML = _renderIdeaGrouped(filtered, 'brand');
+  else if (_ideaView === 'type')     body.innerHTML = _renderIdeaGrouped(filtered, 'content_type');
+  else if (_ideaView === 'category') body.innerHTML = _renderIdeaGrouped(filtered, 'category');
+  else                               body.innerHTML = _renderIdeaGrid(filtered);
+}
+
+function _ideaCard(idea) {
+  const pc = IDEA_STATUS_COLORS[idea.status] || '#94a3b8';
+  const priC = {High:'#ef4444',Medium:'#f59e0b',Low:'#6b7280'}[idea.priority] || '#6b7280';
+  const execBadge = idea.execution_flag==='Execute This Week' ? '<span style="background:#fef9c3;color:#92400e;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:600;">🔥 This Week</span>' : '';
+  const convBadge = idea.converted_to_task ? '<span style="background:#d1fae5;color:#065f46;font-size:10px;padding:1px 6px;border-radius:10px;">✅ Task Created</span>' : '';
+  return `<div draggable="true" ondragstart="onIdeaDragStart(event,'${idea.id}')" ondragover="event.preventDefault()"
+    style="background:var(--w);border:1px solid var(--border);border-left:3px solid ${pc};border-radius:10px;padding:12px;margin-bottom:10px;cursor:grab;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;">
+      <div style="font-size:13px;font-weight:700;flex:1;">${idea.title}</div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button class="btn btn-sm" onclick="openEditIdea('${idea.id}')" style="font-size:11px;padding:2px 7px;">Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteIdea('${idea.id}')" style="font-size:11px;padding:2px 7px;">✕</button>
+      </div>
+    </div>
+    ${idea.description?`<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">${idea.description}</div>`:''}
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
+      ${idea.brand?`<span style="background:var(--p100);color:var(--p700);font-size:10px;padding:1px 7px;border-radius:10px;font-weight:600;">${idea.brand}</span>`:''}
+      ${idea.content_type?`<span style="background:#e0e7ff;color:#3730a3;font-size:10px;padding:1px 7px;border-radius:10px;">${idea.content_type}</span>`:''}
+      ${idea.category?`<span style="background:#f3f4f6;color:#374151;font-size:10px;padding:1px 7px;border-radius:10px;">${idea.category}</span>`:''}
+      <span style="background:${priC}22;color:${priC};font-size:10px;padding:1px 7px;border-radius:10px;font-weight:600;">${idea.priority||'Medium'}</span>
+      ${execBadge}${convBadge}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="background:${pc}22;color:${pc};font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;">${idea.status}</span>
+      <div style="display:flex;align-items:center;gap:6px;">
+        ${idea.assigned_to?`<span style="font-size:11px;color:var(--muted);">👤 ${idea.assigned_to}</span>`:''}
+        ${!idea.converted_to_task?`<button class="btn btn-sm" onclick="convertIdeaToTask('${idea.id}')" style="font-size:10px;padding:2px 7px;">→ Task</button>`:''}
+      </div>
+    </div>
+  </div>`;
+}
+
+function _renderIdeaGrid(filtered) {
+  if (!filtered.length) return '<div class="empty-state" style="padding:30px;text-align:center;">No ideas yet — add your first one!</div>';
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">${filtered.map(_ideaCard).join('')}</div>`;
+}
+
+function _renderIdeaKanban(filtered) {
+  const cols = IDEA_STATUSES.map(status => {
+    const col = filtered.filter(i=>i.status===status);
+    const c   = IDEA_STATUS_COLORS[status];
+    return `<div style="min-width:220px;flex:1;">
+      <div style="font-size:12px;font-weight:700;color:${c};padding:6px 10px;background:${c}18;border:1px solid ${c}30;border-bottom:none;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;">
+        <span>${status}</span><span>${col.length}</span>
+      </div>
+      <div ondragover="onIdeaDragOver(event)" ondrop="onIdeaDrop(event,'${status}')"
+        style="min-height:220px;padding:8px;border:1px solid ${c}30;border-radius:0 0 8px 8px;background:var(--bg);">
+        ${col.map(_ideaCard).join('')}
+      </div>
+    </div>`;
+  }).join('');
+  return `<div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;">${cols}</div>`;
+}
+
+function _renderIdeaGrouped(filtered, field) {
+  const groups = {};
+  filtered.forEach(i => { const k=i[field]||'Uncategorized'; if(!groups[k]) groups[k]=[]; groups[k].push(i); });
+  if (!Object.keys(groups).length) return '<div class="empty-state" style="padding:30px;">No ideas.</div>';
+  return Object.entries(groups).map(([key,items])=>`
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header">
+        <span class="card-title">${key}</span>
+        <span class="pill pill-neutral">${items.length} idea${items.length!==1?'s':''}</span>
+      </div>
+      <div class="card-body" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">
+        ${items.map(_ideaCard).join('')}
+      </div>
+    </div>`).join('');
+}
+
+// Drag & drop
+let _dragIdeaId = null;
+function onIdeaDragStart(e, id) { _dragIdeaId = id; e.dataTransfer.setData('text/plain', id); }
+function onIdeaDragOver(e) { e.preventDefault(); }
+async function onIdeaDrop(e, status) {
+  e.preventDefault();
+  const id = _dragIdeaId || e.dataTransfer.getData('text/plain');
+  if (!id) return;
+  await dbUpdate('ideas', id, { status });
+  ideas = ideas.map(i => i.id===id ? {...i, status} : i);
+  renderIdeas();
+}
+
+function _populateIdeaModal(idea) {
+  const brands = getIdeaBrands(), cats = getIdeaCategories();
+  document.getElementById('idea-brand').innerHTML    = '<option value="">— No Brand —</option>'+brands.map(b=>`<option value="${b}" ${b===(idea?.brand||'')?'selected':''}>${b}</option>`).join('');
+  document.getElementById('idea-category').innerHTML = '<option value="">— No Category —</option>'+cats.map(c=>`<option value="${c}" ${c===(idea?.category||'')?'selected':''}>${c}</option>`).join('');
+  document.getElementById('idea-status').innerHTML   = IDEA_STATUSES.map(s=>`<option value="${s}" ${s===(idea?.status||'Not Started')?'selected':''}>${s}</option>`).join('');
+  document.getElementById('idea-assign-to').innerHTML = '<option value="">— Unassigned —</option>'+teamProfiles.map(p=>`<option value="${p.name}" ${p.name===(idea?.assigned_to||'')?'selected':''}>${p.name}</option>`).join('');
+}
+
+function openAddIdea() {
+  document.getElementById('idea-edit-id').value = '';
+  document.getElementById('modal-idea-title').textContent = 'New Idea';
+  ['idea-title','idea-desc','idea-script','idea-shotlist','idea-refs'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('idea-content-type').value = 'Short Form';
+  document.getElementById('idea-priority').value     = 'Medium';
+  document.getElementById('idea-execution').value    = 'Park for Later';
+  _populateIdeaModal(null);
+  switchIdeaTab('script');
+  openModal('modal-idea');
+}
+
+function openEditIdea(id) {
+  const idea = ideas.find(i=>i.id===id);
+  if (!idea) return;
+  document.getElementById('idea-edit-id').value          = id;
+  document.getElementById('modal-idea-title').textContent = 'Edit Idea';
+  document.getElementById('idea-title').value            = idea.title        || '';
+  document.getElementById('idea-desc').value             = idea.description  || '';
+  document.getElementById('idea-content-type').value     = idea.content_type || 'Short Form';
+  document.getElementById('idea-priority').value         = idea.priority     || 'Medium';
+  document.getElementById('idea-execution').value        = idea.execution_flag || 'Park for Later';
+  document.getElementById('idea-script').value           = idea.script       || '';
+  document.getElementById('idea-shotlist').value         = idea.shot_list    || '';
+  document.getElementById('idea-refs').value             = idea.references_text || '';
+  _populateIdeaModal(idea);
+  switchIdeaTab('script');
+  openModal('modal-idea');
+}
+
+async function saveIdea() {
+  const title = document.getElementById('idea-title')?.value.trim();
+  if (!title) { toast('Title is required.'); return; }
+  const row = {
+    title,
+    description:     document.getElementById('idea-desc')?.value.trim()     || null,
+    content_type:    document.getElementById('idea-content-type')?.value    || 'Short Form',
+    brand:           document.getElementById('idea-brand')?.value           || null,
+    category:        document.getElementById('idea-category')?.value        || null,
+    status:          document.getElementById('idea-status')?.value          || 'Not Started',
+    priority:        document.getElementById('idea-priority')?.value        || 'Medium',
+    execution_flag:  document.getElementById('idea-execution')?.value       || 'Park for Later',
+    assigned_to:     document.getElementById('idea-assign-to')?.value       || null,
+    script:          document.getElementById('idea-script')?.value.trim()   || null,
+    shot_list:       document.getElementById('idea-shotlist')?.value.trim() || null,
+    references_text: document.getElementById('idea-refs')?.value.trim()     || null,
+  };
+  const editId = document.getElementById('idea-edit-id')?.value;
+  if (editId) {
+    const ok = await dbUpdate('ideas', editId, row);
+    if (ok) { ideas = ideas.map(i=>i.id===editId ? {...i,...row} : i); toast('Idea updated!'); }
+  } else {
+    const saved = await dbInsert('ideas', row);
+    if (saved) ideas.unshift(saved);
+  }
+  closeModal('modal-idea');
+  renderIdeas();
+}
+
+async function deleteIdea(id) {
+  if (!confirm('Delete this idea?')) return;
+  await dbDelete('ideas', id);
+  ideas = ideas.filter(i=>i.id!==id);
+  renderIdeas();
+}
+
+async function quickAddIdea() {
+  const input = document.getElementById('idea-quick-title');
+  const title = input?.value.trim();
+  if (!title) return;
+  const saved = await dbInsert('ideas', { title, status:'Not Started', priority:'Medium', execution_flag:'Park for Later', content_type:'Short Form' });
+  if (saved) { ideas.unshift(saved); input.value=''; renderIdeas(); }
+}
+
+async function convertIdeaToTask(id) {
+  const idea = ideas.find(i=>i.id===id);
+  if (!idea) return;
+  const saved = await dbInsert('tasks', { name:idea.title, client:idea.brand||'General', type:idea.content_type||'Reel', owner:idea.assigned_to||'', status:'Not Started', priority:idea.priority||'Medium' });
+  if (saved) {
+    tasks.unshift(saved);
+    await dbUpdate('ideas', id, { converted_to_task: true });
+    ideas = ideas.map(i=>i.id===id ? {...i, converted_to_task:true} : i);
+    toast('Converted to task!');
+    renderIdeas();
+  }
+}
+
+function addNewIdeaBrand() {
+  const name = prompt('New brand name:');
+  if (!name?.trim()) return;
+  const brands = getIdeaBrands();
+  if (!brands.includes(name.trim())) { brands.push(name.trim()); saveIdeaBrands(brands); }
+  _populateIdeaModal(null);
+  document.getElementById('idea-brand').value = name.trim();
+}
+
+function addNewIdeaCategory() {
+  const name = prompt('New category name:');
+  if (!name?.trim()) return;
+  const cats = getIdeaCategories();
+  if (!cats.includes(name.trim())) { cats.push(name.trim()); saveIdeaCategories(cats); }
+  _populateIdeaModal(null);
+  document.getElementById('idea-category').value = name.trim();
+}
+
+function switchIdeaTab(tab) {
+  ['script','shotlist','refs'].forEach(t => {
+    const el = document.getElementById('idea-'+t);
+    if (el) el.style.display = t===tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('#idea-attach-tabs .btn').forEach(b => b.classList.remove('btn-primary'));
+  const active = document.getElementById('idea-attach-tab-'+tab);
+  if (active) active.classList.add('btn-primary');
 }
 
 

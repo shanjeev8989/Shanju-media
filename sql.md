@@ -1,3 +1,32 @@
+## Step 12 — Ideas table (run after Step 11)
+
+```sql
+CREATE TABLE IF NOT EXISTS ideas (
+  id               uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at       timestamptz DEFAULT now(),
+  title            text NOT NULL,
+  description      text,
+  content_type     text DEFAULT 'Short Form',
+  brand            text,
+  category         text,
+  status           text DEFAULT 'Not Started',
+  priority         text DEFAULT 'Medium',
+  execution_flag   text DEFAULT 'Park for Later',
+  assigned_to      text,
+  script           text,
+  shot_list        text,
+  references_text  text,
+  converted_to_task boolean DEFAULT false
+);
+
+ALTER TABLE ideas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "auth_all" ON ideas FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+```
+
+---
+
 ## Step 11 — Shoot Day column (run after Step 10)
 
 ```sql
