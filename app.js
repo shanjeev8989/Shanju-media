@@ -2550,6 +2550,8 @@ function showPerfDetail(name) {
 
 // ---- 18. DAILY UPDATE ----
 
+let _duEditMode = false;
+
 function renderDailyUpdate() {
   const todayStr  = new Date().toISOString().split('T')[0];
   const yesterStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
@@ -2570,7 +2572,7 @@ function renderDailyUpdate() {
 
   let html = '';
 
-  if (!todayRec || !todayRec.morning_done) {
+  if (!todayRec || !todayRec.morning_done || _duEditMode) {
     // Morning plan form
     const carryHtml = carryovers.length ? `
       <div style="margin-bottom:16px;background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:12px;">
@@ -2578,7 +2580,7 @@ function renderDailyUpdate() {
         ${carryovers.map(t => `<div style="font-size:13px;padding:3px 0;color:#78350f;">• ${t}</div>`).join('')}
       </div>` : '';
 
-    // Pre-fill from draft saved in DB (morning_done=false) or localStorage
+    // Pre-fill from existing submitted record (edit mode), draft in DB, or localStorage
     const draftBefore = todayRec?.before_lunch?.map(t=>t.task).join('\n') || localStorage.getItem(`du-draft-before-${currentUser}-${todayStr}`) || '';
     const draftAfter  = todayRec?.after_lunch?.map(t=>t.task).join('\n')  || localStorage.getItem(`du-draft-after-${currentUser}-${todayStr}`)  || '';
     const hasDraft    = !!(draftBefore || draftAfter);
@@ -2586,8 +2588,8 @@ function renderDailyUpdate() {
     html = `
       <div class="card" style="border:2px solid var(--p400);">
         <div class="card-header">
-          <span class="card-title">🌅 Morning Plan <span style="font-size:12px;color:var(--muted);font-weight:400;">(fill within 5 minutes of starting work)</span></span>
-          ${hasDraft ? '<span class="pill pill-neutral">Draft saved</span>' : '<span class="pill pill-warning">Not submitted</span>'}
+          <span class="card-title">🌅 ${_duEditMode ? 'Edit Morning Plan' : 'Morning Plan'} <span style="font-size:12px;color:var(--muted);font-weight:400;">${_duEditMode ? '' : '(fill within 5 minutes of starting work)'}</span></span>
+          ${_duEditMode ? '<span class="pill pill-warning">Editing</span>' : hasDraft ? '<span class="pill pill-neutral">Draft saved</span>' : '<span class="pill pill-warning">Not submitted</span>'}
         </div>
         <div class="card-body">
           ${carryHtml}
@@ -2615,8 +2617,8 @@ function renderDailyUpdate() {
             <div style="font-size:12px;color:#047857;margin-top:4px;">No tasks needed. Just submit to mark your attendance.</div>
           </div>
           <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
-            <button class="btn btn-primary" onclick="saveMorningPlan()">Submit Morning Plan</button>
-            <button class="btn" onclick="saveMorningDraft()">Save for Now</button>
+            <button class="btn btn-primary" onclick="saveMorningPlan()">${_duEditMode ? 'Save Changes' : 'Submit Morning Plan'}</button>
+            ${_duEditMode ? '<button class="btn" onclick="_duEditMode=false;renderDailyUpdate()">Cancel</button>' : '<button class="btn" onclick="saveMorningDraft()">Save for Now</button>'}
           </div>
         </div>
       </div>`;
@@ -2669,7 +2671,10 @@ function renderDailyUpdate() {
       <div class="card">
         <div class="card-header">
           <span class="card-title">🌅 Today's Plan</span>
-          <span class="pill pill-success">Morning plan submitted ✓</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="pill pill-success">Morning plan submitted ✓</span>
+            <button class="btn btn-sm" onclick="_duEditMode=true;renderDailyUpdate()" style="font-size:11px;">Edit Plan</button>
+          </div>
         </div>
         <div class="card-body">
           <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Before Lunch</div>
@@ -2873,7 +2878,8 @@ async function saveMorningPlan() {
   setSyncing(); _markLocalWrite();
   const { data, error } = await sb.from('daily_updates').upsert([row], { onConflict: 'member_name,update_date' }).select();
   if (error) { setSyncError(); toast('Save failed: ' + error.message); return; }
-  setSynced(); toast('Morning plan submitted!');
+  setSynced(); toast(_duEditMode ? 'Plan updated!' : 'Morning plan submitted!');
+  _duEditMode = false;
 
   // Clear localStorage draft once officially submitted
   localStorage.removeItem(`du-draft-before-${currentUser}-${todayStr}`);
