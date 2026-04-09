@@ -1,3 +1,31 @@
+## Step 10 — Daily Expenses table (run in Supabase SQL editor)
+
+```sql
+CREATE TABLE IF NOT EXISTS expenses (
+  id                uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at        timestamptz DEFAULT now(),
+  date              date NOT NULL,
+  member_name       text,
+  client_name       text,
+  category          text,
+  amount            numeric DEFAULT 0,
+  description       text,
+  payment_method    text,
+  is_shoot          boolean DEFAULT false,
+  shoot_name        text,
+  location          text,
+  transport_expense numeric DEFAULT 0,
+  food_expense      numeric DEFAULT 0,
+  stay_expense      numeric DEFAULT 0,
+  other_expense     numeric DEFAULT 0
+);
+
+ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "auth_all" ON expenses FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+```
+
 ## Step 9 — Daily Update table (run after Step 8)
 
 ```sql

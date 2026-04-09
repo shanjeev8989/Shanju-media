@@ -28,6 +28,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let tasks = [], shoots = [], posts = [], pipeline = [], payments = [], invoices = [];
 let clientFollowups = [], clientReviews = [];
 let dailyUpdates = [];
+let expenses = [];
 let teamDailyViewDate   = new Date().toISOString().split('T')[0];
 let dailyMonthView      = new Date().toISOString().slice(0, 7); // "YYYY-MM"
 let teamProfiles = []; // all approved profiles — used for editor dropdown
@@ -117,6 +118,13 @@ async function loadAll(silent = false) {
     } catch (e3) {
       dailyUpdates = [];
     }
+    // Expenses — all records
+    try {
+      const { data: expData, error: expErr } = await sb.from('expenses').select('*').order('date', { ascending: false });
+      if (!expErr) expenses = expData || [];
+    } catch (e4) {
+      expenses = [];
+    }
     // Only rebuild dropdowns and check pending users on full loads (not silent background refreshes)
     if (!silent) {
       populateEditorDropdown();
@@ -129,8 +137,10 @@ async function loadAll(silent = false) {
       renderPage(document.querySelector('.page.active')?.id.replace('page-', ''));
       updatePayNotif();
     } else {
-      // Silent background reload: refresh dashboard counts only (no dropdown rebuild, no full page re-render)
+      // Silent background reload: refresh dashboard counts + active page if it needs live data
       renderDash();
+      const silentActivePage = document.querySelector('.page.active')?.id.replace('page-', '');
+      if (silentActivePage === 'expenses') renderExpenses();
     }
   } catch (e) {
     setSyncError();
@@ -248,6 +258,7 @@ function renderPage(id) {
   else if (id === 'team-daily')      renderTeamDaily();
   else if (id === 'performance')     renderPerformance();
   else if (id === 'founder-panel')   renderFounderPanel();
+  else if (id === 'expenses')        renderExpenses();
 }
 
 function switchUser() {
@@ -2965,7 +2976,210 @@ function toggleDailyDetail(safeId) {
 }
 
 
-// ---- 18. REALTIME + INIT ----
+// ---- 18. EXPENSES ----
+
+function toggleShootFields() {
+  const isShoot = document.getElementById('exp-is-shoot').value === 'yes';
+  document.getElementById('exp-shoot-section').style.display = isShoot ? 'block' : 'none';
+  if (isShoot) calcShootTotal();
+}
+
+function calcShootTotal() {
+  const t = Number(document.getElementById('exp-transport').value) || 0;
+  const f = Number(document.getElementById('exp-food').value)      || 0;
+  const s = Number(document.getElementById('exp-stay').value)      || 0;
+  const o = Number(document.getElementById('exp-other').value)     || 0;
+  const total = t + f + s + o;
+  document.getElementById('exp-shoot-auto-total').textContent = '₹' + total.toLocaleString('en-IN');
+  document.getElementById('exp-amount').value = total || '';
+}
+
+function _expPopulateMember(selectedName) {
+  const sel = document.getElementById('exp-member');
+  sel.innerHTML = '<option value="">— Select member —</option>' +
+    teamProfiles.map(p => `<option value="${p.name}" ${p.name === selectedName ? 'selected' : ''}>${p.name}</option>`).join('');
+}
+
+function openAddExpense() {
+  document.getElementById('modal-expense-title').textContent = '💸 Add Expense';
+  document.getElementById('exp-edit-id').value   = '';
+  document.getElementById('exp-date').value      = new Date().toISOString().split('T')[0];
+  document.getElementById('exp-client').value    = '';
+  document.getElementById('exp-category').value  = 'Food & Beverage';
+  document.getElementById('exp-amount').value    = '';
+  document.getElementById('exp-payment').value   = 'Cash';
+  document.getElementById('exp-desc').value      = '';
+  document.getElementById('exp-is-shoot').value  = 'no';
+  document.getElementById('exp-shoot-name').value = '';
+  document.getElementById('exp-location').value  = '';
+  document.getElementById('exp-transport').value = '';
+  document.getElementById('exp-food').value      = '';
+  document.getElementById('exp-stay').value      = '';
+  document.getElementById('exp-other').value     = '';
+  document.getElementById('exp-shoot-section').style.display = 'none';
+  _expPopulateMember(currentUser);
+  openModal('modal-expense');
+}
+
+function openEditExpense(id) {
+  const e = expenses.find(e => e.id === id);
+  if (!e) return;
+  document.getElementById('modal-expense-title').textContent  = '✏️ Edit Expense';
+  document.getElementById('exp-edit-id').value    = id;
+  document.getElementById('exp-date').value       = e.date || '';
+  document.getElementById('exp-client').value     = e.client_name || '';
+  document.getElementById('exp-category').value   = e.category || 'Food & Beverage';
+  document.getElementById('exp-amount').value     = e.amount || '';
+  document.getElementById('exp-payment').value    = e.payment_method || 'Cash';
+  document.getElementById('exp-desc').value       = e.description || '';
+  document.getElementById('exp-is-shoot').value   = e.is_shoot ? 'yes' : 'no';
+  document.getElementById('exp-shoot-name').value = e.shoot_name || '';
+  document.getElementById('exp-location').value   = e.location || '';
+  document.getElementById('exp-transport').value  = e.transport_expense || '';
+  document.getElementById('exp-food').value       = e.food_expense || '';
+  document.getElementById('exp-stay').value       = e.stay_expense || '';
+  document.getElementById('exp-other').value      = e.other_expense || '';
+  document.getElementById('exp-shoot-section').style.display = e.is_shoot ? 'block' : 'none';
+  if (e.is_shoot) calcShootTotal();
+  _expPopulateMember(e.member_name);
+  openModal('modal-expense');
+}
+
+async function saveExpense() {
+  const editId  = document.getElementById('exp-edit-id').value;
+  const isShoot = document.getElementById('exp-is-shoot').value === 'yes';
+  const amount  = isShoot
+    ? (Number(document.getElementById('exp-transport').value) || 0)
+    + (Number(document.getElementById('exp-food').value)      || 0)
+    + (Number(document.getElementById('exp-stay').value)      || 0)
+    + (Number(document.getElementById('exp-other').value)     || 0)
+    : Number(document.getElementById('exp-amount').value) || 0;
+
+  const date = document.getElementById('exp-date').value;
+  if (!date) { toast('Date is required.'); return; }
+
+  const row = {
+    date,
+    member_name:       document.getElementById('exp-member').value   || null,
+    client_name:       document.getElementById('exp-client').value   || null,
+    category:          document.getElementById('exp-category').value,
+    amount,
+    description:       document.getElementById('exp-desc').value     || null,
+    payment_method:    document.getElementById('exp-payment').value,
+    is_shoot:          isShoot,
+    shoot_name:        isShoot ? (document.getElementById('exp-shoot-name').value || null) : null,
+    location:          isShoot ? (document.getElementById('exp-location').value   || null) : null,
+    transport_expense: isShoot ? (Number(document.getElementById('exp-transport').value) || 0) : 0,
+    food_expense:      isShoot ? (Number(document.getElementById('exp-food').value)      || 0) : 0,
+    stay_expense:      isShoot ? (Number(document.getElementById('exp-stay').value)      || 0) : 0,
+    other_expense:     isShoot ? (Number(document.getElementById('exp-other').value)     || 0) : 0,
+  };
+
+  const btn = document.getElementById('exp-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  if (editId) {
+    await dbUpdate('expenses', editId, row);
+    expenses = expenses.map(e => e.id === editId ? { ...e, ...row } : e);
+  } else {
+    const saved = await dbInsert('expenses', row);
+    if (saved) expenses.unshift(saved);
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Save Expense'; }
+  closeModal('modal-expense');
+  renderExpenses();
+}
+
+async function deleteExpense(id) {
+  if (!confirm('Delete this expense?')) return;
+  await dbDelete('expenses', id);
+  expenses = expenses.filter(e => e.id !== id);
+  renderExpenses();
+}
+
+function clearExpFilters() {
+  document.getElementById('exp-filter-date').value     = '';
+  document.getElementById('exp-filter-month').value    = new Date().toISOString().slice(0, 7);
+  document.getElementById('exp-filter-member').value   = '';
+  document.getElementById('exp-filter-client').value   = '';
+  document.getElementById('exp-filter-category').value = '';
+  document.getElementById('exp-filter-type').value     = '';
+  renderExpenses();
+}
+
+function renderExpenses() {
+  const today     = new Date().toISOString().split('T')[0];
+  const thisMonth = today.slice(0, 7);
+  // Default month filter to current month on first render
+  const mfEl = document.getElementById('exp-filter-month');
+  if (mfEl && !mfEl.value) mfEl.value = thisMonth;
+
+  // Summary (always full data, ignores filters)
+  const todayExp    = expenses.filter(e => e.date === today);
+  const monthExp    = expenses.filter(e => e.date?.startsWith(thisMonth));
+  const todayTotal  = todayExp.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const monthTotal  = monthExp.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const monthShoot  = monthExp.filter(e => e.is_shoot).reduce((s, e) => s + Number(e.amount || 0), 0);
+  const monthOffice = monthExp.filter(e => !e.is_shoot).reduce((s, e) => s + Number(e.amount || 0), 0);
+
+  document.getElementById('exp-summary').innerHTML = `
+    <div class="mcard warning"><div class="mcard-label">Today's Expenses</div><div class="mcard-val">₹${todayTotal.toLocaleString('en-IN')}</div><div class="mcard-sub">${todayExp.length} entr${todayExp.length === 1 ? 'y' : 'ies'}</div></div>
+    <div class="mcard danger"><div class="mcard-label">This Month Total</div><div class="mcard-val">₹${monthTotal.toLocaleString('en-IN')}</div><div class="mcard-sub">${monthExp.length} entries</div></div>
+    <div class="mcard purple"><div class="mcard-label">Shoot Expenses</div><div class="mcard-val">₹${monthShoot.toLocaleString('en-IN')}</div><div class="mcard-sub">this month</div></div>
+    <div class="mcard info"><div class="mcard-label">Office / General</div><div class="mcard-val">₹${monthOffice.toLocaleString('en-IN')}</div><div class="mcard-sub">this month</div></div>`;
+
+  // Update filter dropdowns
+  const members    = [...new Set(expenses.map(e => e.member_name).filter(Boolean))].sort();
+  const clients    = [...new Set(expenses.map(e => e.client_name).filter(Boolean))].sort();
+  const mSel = document.getElementById('exp-filter-member');
+  const cSel = document.getElementById('exp-filter-client');
+  if (mSel) { const cv = mSel.value; mSel.innerHTML = '<option value="">All Members</option>' + members.map(m => `<option value="${m}" ${m===cv?'selected':''}>${m}</option>`).join(''); }
+  if (cSel) { const cv = cSel.value; cSel.innerHTML = '<option value="">All Clients</option>'  + clients.map(c => `<option value="${c}" ${c===cv?'selected':''}>${c}</option>`).join(''); }
+
+  // Apply filters
+  const dateFilter   = document.getElementById('exp-filter-date')?.value;
+  const monthFilter  = document.getElementById('exp-filter-month')?.value;
+  const memberFilter = document.getElementById('exp-filter-member')?.value;
+  const clientFilter = document.getElementById('exp-filter-client')?.value;
+  const catFilter    = document.getElementById('exp-filter-category')?.value;
+  const typeFilter   = document.getElementById('exp-filter-type')?.value;
+
+  let filtered = [...expenses];
+  if (dateFilter)             filtered = filtered.filter(e => e.date === dateFilter);
+  else if (monthFilter)       filtered = filtered.filter(e => e.date?.startsWith(monthFilter));
+  if (memberFilter)           filtered = filtered.filter(e => e.member_name === memberFilter);
+  if (clientFilter)           filtered = filtered.filter(e => e.client_name === clientFilter);
+  if (catFilter)              filtered = filtered.filter(e => e.category === catFilter);
+  if (typeFilter === 'shoot')  filtered = filtered.filter(e => e.is_shoot);
+  if (typeFilter === 'office') filtered = filtered.filter(e => !e.is_shoot);
+
+  const filteredTotal = filtered.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const totEl = document.getElementById('exp-filtered-total');
+  if (totEl) totEl.textContent = filtered.length ? `Total: ₹${filteredTotal.toLocaleString('en-IN')}` : '';
+
+  document.getElementById('exp-list').innerHTML = filtered.length
+    ? filtered.map(e => {
+        const amt = Number(e.amount || 0);
+        return `<div class="alert-row">
+          <div class="adot ${e.is_shoot ? 'adot-purple' : 'adot-blue'}"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;">${e.member_name || '—'} · ${e.client_name || 'No client'} · ${e.category || '—'}
+              ${e.is_shoot ? '<span class="pill pill-info" style="font-size:10px;margin-left:4px;">🎬 Shoot</span>' : ''}
+            </div>
+            <div style="font-size:12px;color:var(--muted);">${fmt(e.date)} · ${e.payment_method || ''} · ${e.description || '—'}</div>
+            ${e.is_shoot && e.shoot_name ? `<div style="font-size:11px;color:var(--p700);margin-top:2px;">📍 ${e.shoot_name}${e.location ? ' · '+e.location : ''}${e.transport_expense ? ' · 🚗 ₹'+e.transport_expense : ''}${e.food_expense ? ' · 🍱 ₹'+e.food_expense : ''}${e.stay_expense ? ' · 🏨 ₹'+e.stay_expense : ''}${e.other_expense ? ' · Other ₹'+e.other_expense : ''}</div>` : ''}
+          </div>
+          <div style="font-size:15px;font-weight:700;color:var(--danger);white-space:nowrap;margin-right:8px;">₹${amt.toLocaleString('en-IN')}</div>
+          <button class="btn btn-sm btn-primary" style="font-size:11px;" onclick="openEditExpense('${e.id}')">Edit</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteExpense('${e.id}')">✕</button>
+        </div>`;
+      }).join('')
+    : '<div class="empty-state">No expenses found.</div>';
+}
+
+
+// ---- 19. REALTIME + INIT ----
 let _realtimeTimer  = null;
 let _tabWasHidden   = false;
 let _realtimeSetup  = false;

@@ -123,6 +123,7 @@
     <div class="nav-item" data-section="planning" onclick="nav('shoot-cal',this)"><span class="nav-icon">📷</span> Shoot Calendar</div>
     <div class="nav-item" data-section="planning" onclick="nav('post-cal',this)"> <span class="nav-icon">📅</span> Post Calendar</div>
     <div class="nav-item" data-section="planning" onclick="nav('pipeline',this)"> <span class="nav-icon">🚀</span> Post Pipeline</div>
+    <div class="nav-item" data-section="planning" onclick="nav('expenses',this)"><span class="nav-icon">💸</span> Daily Expenses</div>
 
     <div class="nav-section" data-section="founder">Founder</div>
     <div class="nav-item" data-section="founder" onclick="nav('founder-panel',this)"><span class="nav-icon">⚡</span> Command Panel</div>
@@ -475,6 +476,71 @@
 
 
     <!-- =====================================================
+         DAILY EXPENSES PAGE
+         ===================================================== -->
+    <div class="page" id="page-expenses">
+      <div class="topbar">
+        <div>
+          <div class="page-title">💸 Daily Expenses</div>
+          <div class="page-sub">Track team and shoot expenses</div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openAddExpense()">+ Add Expense</button>
+      </div>
+
+      <!-- Summary cards -->
+      <div class="metric-grid" id="exp-summary" style="margin-bottom:16px;">
+        <div class="loading"><div class="spinner"></div>Loading...</div>
+      </div>
+
+      <!-- Filters -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-body" style="padding:12px 16px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <input type="date" id="exp-filter-date" onchange="renderExpenses()"
+              style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
+            <input type="month" id="exp-filter-month" onchange="renderExpenses()"
+              style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
+            <select id="exp-filter-member" onchange="renderExpenses()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
+              <option value="">All Members</option>
+            </select>
+            <select id="exp-filter-client" onchange="renderExpenses()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
+              <option value="">All Clients</option>
+            </select>
+            <select id="exp-filter-category" onchange="renderExpenses()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
+              <option value="">All Categories</option>
+              <option>Food &amp; Beverage</option>
+              <option>Transport</option>
+              <option>Equipment Rental</option>
+              <option>Location / Studio</option>
+              <option>Accommodation</option>
+              <option>Props &amp; Supplies</option>
+              <option>Software &amp; Tools</option>
+              <option>Printing &amp; Stationery</option>
+              <option>Communication</option>
+              <option>Miscellaneous</option>
+            </select>
+            <select id="exp-filter-type" onchange="renderExpenses()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
+              <option value="">All Types</option>
+              <option value="shoot">Shoot Only</option>
+              <option value="office">Office / General Only</option>
+            </select>
+            <button class="btn btn-sm" onclick="clearExpFilters()">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Expense list -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Expense Entries</span>
+          <span id="exp-filtered-total" style="font-size:13px;font-weight:700;color:var(--danger);"></span>
+        </div>
+        <div class="card-body" id="exp-list"></div>
+      </div>
+    </div>
+
+
+    <!-- =====================================================
          PAYMENTS PAGE
          ===================================================== -->
     <div class="page" id="page-payments">
@@ -772,6 +838,80 @@
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-pipeline')">Cancel</button>
       <button class="btn btn-primary" onclick="savePipeline()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add / Edit Expense -->
+<div class="modal-overlay" id="modal-expense">
+  <div class="modal" style="max-width:580px;">
+    <div class="modal-title" id="modal-expense-title">💸 Add Expense</div>
+    <input type="hidden" id="exp-edit-id">
+    <div class="form-grid">
+      <div class="fg"><label>Date</label><input type="date" id="exp-date"></div>
+      <div class="fg"><label>Team Member</label>
+        <select id="exp-member"><option value="">— Select member —</option></select>
+      </div>
+      <div class="fg"><label>Client Name <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+        <input id="exp-client" placeholder="e.g. Ramraj">
+      </div>
+      <div class="fg"><label>Category</label>
+        <select id="exp-category">
+          <option>Food &amp; Beverage</option>
+          <option>Transport</option>
+          <option>Equipment Rental</option>
+          <option>Location / Studio</option>
+          <option>Accommodation</option>
+          <option>Props &amp; Supplies</option>
+          <option>Software &amp; Tools</option>
+          <option>Printing &amp; Stationery</option>
+          <option>Communication</option>
+          <option>Miscellaneous</option>
+        </select>
+      </div>
+      <div class="fg"><label>Amount (₹)</label>
+        <input type="number" id="exp-amount" placeholder="0" min="0">
+      </div>
+      <div class="fg"><label>Payment Method</label>
+        <select id="exp-payment">
+          <option>Cash</option>
+          <option>UPI / GPay</option>
+          <option>Bank Transfer</option>
+          <option>Credit Card</option>
+          <option>Company Account</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg"><label>Description / Note</label>
+      <textarea id="exp-desc" placeholder="What was this expense for?"></textarea>
+    </div>
+    <div class="fg"><label>Is this a Shoot Expense?</label>
+      <select id="exp-is-shoot" onchange="toggleShootFields()">
+        <option value="no">No — General / Office</option>
+        <option value="yes">Yes — Shoot Expense</option>
+      </select>
+    </div>
+
+    <!-- Shoot breakdown (shown only when shoot = yes) -->
+    <div id="exp-shoot-section" style="display:none;border:1px solid var(--p300,#c4b5fd);border-radius:12px;padding:14px;background:#f5f3ff;margin-top:8px;">
+      <div style="font-size:13px;font-weight:700;color:var(--p900);margin-bottom:10px;">🎬 Shoot Details</div>
+      <div class="form-grid">
+        <div class="fg"><label>Shoot / Project Name</label><input id="exp-shoot-name" placeholder="e.g. Ramraj Brand Film"></div>
+        <div class="fg"><label>Location</label><input id="exp-location" placeholder="e.g. Chennai Studio"></div>
+        <div class="fg"><label>Transport (₹)</label><input type="number" id="exp-transport" placeholder="0" min="0" oninput="calcShootTotal()"></div>
+        <div class="fg"><label>Food (₹)</label><input type="number" id="exp-food" placeholder="0" min="0" oninput="calcShootTotal()"></div>
+        <div class="fg"><label>Stay / Accommodation (₹)</label><input type="number" id="exp-stay" placeholder="0" min="0" oninput="calcShootTotal()"></div>
+        <div class="fg"><label>Other (₹)</label><input type="number" id="exp-other" placeholder="0" min="0" oninput="calcShootTotal()"></div>
+      </div>
+      <div style="margin-top:8px;font-size:13px;color:var(--p900);">
+        Auto Total: <strong id="exp-shoot-auto-total">₹0</strong>
+        <span style="font-size:11px;color:var(--muted);"> (fills Amount field above)</span>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-expense')">Cancel</button>
+      <button class="btn btn-primary" id="exp-save-btn" onclick="saveExpense()">Save Expense</button>
     </div>
   </div>
 </div>
