@@ -538,6 +538,7 @@ function renderDash() {
   document.getElementById('focus-title').textContent = isOwner ? '🎯 Founder Focus Today' : '🎯 My Focus Today';
 
   // Active tasks for current user scope
+  console.log('[DEBUG] renderDash — tasks.length:', tasks.length, 'role:', currentProfile?.role);
   const allActive = tasks.filter(t => t.status !== 'Exported' && !t.done);
   const cuLower   = currentUser.trim().toLowerCase();
   const myActive  = allActive.filter(t => t.owner && t.owner.trim().toLowerCase() === cuLower);
