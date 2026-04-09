@@ -621,20 +621,7 @@ function renderDash() {
       ? editorDailyRows.join('')
       : '<div class="empty-state" style="padding:14px;">No editors found.</div>';
 
-    // 2. Due today — all tasks across team
-    const dueTodayAll = allActive.filter(t => daysDiff(t.deadline) === 0);
-    const dueTodayEl    = document.getElementById('dash-due-today');
-    const dueTodayCount = document.getElementById('dash-due-today-count');
-    if (dueTodayCount) dueTodayCount.textContent = dueTodayAll.length ? `${dueTodayAll.length}` : '';
-    if (dueTodayEl) dueTodayEl.innerHTML = dueTodayAll.length
-      ? dueTodayAll.map(t => `
-          <div style="padding:9px 14px;border-bottom:1px solid var(--border);">
-            <div style="font-size:13px;font-weight:600;">${t.name || t.client}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px;">${t.client} · ${t.owner || '—'} · ${statusPill(t.status)}</div>
-          </div>`).join('')
-      : '<div class="empty-state" style="padding:14px;">Nothing due today 🎉</div>';
-
-    // 3. Today's posts — from Post Calendar, show export status
+    // 2. Today's posts — from Post Calendar, show export status
     const todayPostsAll = posts.filter(p => p.date === todayStr);
     const todayPostsEl    = document.getElementById('dash-today-posts');
     const todayPostsCount = document.getElementById('dash-today-posts-count');
