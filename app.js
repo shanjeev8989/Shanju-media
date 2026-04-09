@@ -143,10 +143,9 @@ async function loadAll(silent = false) {
 function populateEditorDropdown() {
   const sel = document.getElementById('po-editor');
   if (!sel) return;
-  const editors = teamProfiles.filter(p => p.role === 'editor');
   const current = sel.value;
   sel.innerHTML = '<option value="">— Unassigned —</option>' +
-    editors.map(e => `<option value="${e.name}" ${e.name === current ? 'selected' : ''}>${e.name}</option>`).join('');
+    teamProfiles.map(e => `<option value="${e.name}" ${e.name === current ? 'selected' : ''}>${e.name}</option>`).join('');
 }
 
 function populateTeamDropdowns() {
@@ -1230,7 +1229,7 @@ function renderPostCal() {
             <div style="font-size:13px;font-weight:600;">${p.client} — ${p.content_type || ''}</div>
             <div style="font-size:12px;color:var(--muted);">${fmt(p.date)} · ${p.platform || ''} · Caption:
               <span style="color:${p.caption_status === 'Approved' ? 'var(--success)' : p.caption_status === 'Pending' ? 'var(--danger)' : 'var(--warning)'};">${p.caption_status || ''}</span>
-              ${p.assigned_editor ? `· <span style="background:var(--p100);color:var(--p900);font-size:11px;padding:1px 7px;border-radius:20px;font-weight:600;">${p.assigned_editor}</span>` : ''}
+              · <span style="background:var(--p100);color:var(--p900);font-size:11px;padding:1px 7px;border-radius:20px;font-weight:600;">${p.assigned_editor || 'Unassigned'}</span>
             </div>
           </div>
           <button class="btn btn-sm btn-danger" onclick="deletePost('${p.id}')">✕</button>
