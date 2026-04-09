@@ -582,18 +582,44 @@ function renderDash() {
     const todayStr = new Date().toISOString().split('T')[0];
     const editors  = teamProfiles.filter(p => p.role === 'editor').map(p => p.name);
 
-    // 1. Editor tasks today (active tasks owned by editors)
-    const editorTasks = allActive.filter(t => editors.some(e => e.trim().toLowerCase() === (t.owner||'').trim().toLowerCase()));
+    // 1. Editor daily tasks from daily updates (what they planned today)
     const editorTasksEl    = document.getElementById('dash-editor-tasks');
     const editorTasksCount = document.getElementById('dash-editor-tasks-count');
-    if (editorTasksCount) editorTasksCount.textContent = editorTasks.length ? `${editorTasks.length} tasks` : '';
-    if (editorTasksEl) editorTasksEl.innerHTML = editorTasks.length
-      ? editorTasks.map(t => `
+    const editorDailyRows  = [];
+    editors.forEach(name => {
+      const rec = dailyUpdates.find(d => d.member_name === name && d.update_date === todayStr);
+      if (!rec || !rec.morning_done) {
+        editorDailyRows.push(`
           <div style="padding:9px 14px;border-bottom:1px solid var(--border);">
-            <div style="font-size:13px;font-weight:600;">${t.owner} — ${t.name || t.client}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px;">${t.client} · ${statusPill(t.status)}</div>
-          </div>`).join('')
-      : '<div class="empty-state" style="padding:14px;">No active editor tasks.</div>';
+            <div style="font-size:13px;font-weight:600;">${name}</div>
+            <div style="font-size:11px;color:var(--danger);margin-top:2px;">⚠ No morning plan submitted</div>
+          </div>`);
+        return;
+      }
+      if (rec.is_shoot_day) {
+        editorDailyRows.push(`
+          <div style="padding:9px 14px;border-bottom:1px solid var(--border);background:#f0fdf4;">
+            <div style="font-size:13px;font-weight:600;">${name}</div>
+            <div style="font-size:11px;color:#15803d;margin-top:2px;">🎬 Shoot Day — 100 pts</div>
+          </div>`);
+        return;
+      }
+      const allTasks = [...(rec.before_lunch||[]), ...(rec.after_lunch||[])];
+      const statusIcon = s => s === 'completed' ? '✅' : s === 'in_progress' ? '🔄' : s === 'not_done' ? '❌' : '⏳';
+      editorDailyRows.push(`
+        <div style="padding:9px 14px;border-bottom:1px solid var(--border);">
+          <div style="font-size:12px;font-weight:700;color:var(--p700);margin-bottom:4px;">${name}</div>
+          ${allTasks.map(t => `<div style="font-size:12px;padding:2px 0;display:flex;gap:6px;align-items:center;">
+            <span>${statusIcon(t.status)}</span>
+            <span style="flex:1;color:${t.status==='completed'?'var(--muted)':'inherit'};${t.status==='completed'?'text-decoration:line-through;':''}">${t.task}</span>
+          </div>`).join('')}
+        </div>`);
+    });
+    const totalDailyTasks = editorDailyRows.length;
+    if (editorTasksCount) editorTasksCount.textContent = totalDailyTasks ? `${editors.length} editors` : '';
+    if (editorTasksEl) editorTasksEl.innerHTML = editorDailyRows.length
+      ? editorDailyRows.join('')
+      : '<div class="empty-state" style="padding:14px;">No editors found.</div>';
 
     // 2. Due today — all tasks across team
     const dueTodayAll = allActive.filter(t => daysDiff(t.deadline) === 0);
