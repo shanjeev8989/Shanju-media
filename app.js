@@ -1232,7 +1232,7 @@ function renderPostCal() {
               · <span style="background:var(--p100);color:var(--p900);font-size:11px;padding:1px 7px;border-radius:20px;font-weight:600;">${p.assigned_editor || 'Unassigned'}</span>
             </div>
           </div>
-          <button class="btn btn-sm" onclick="openEditPost('${p.id}')">✏️</button>
+          <button class="btn btn-sm btn-primary" style="font-size:11px;" onclick="openEditPost('${p.id}')">Edit</button>
           <button class="btn btn-sm btn-danger" onclick="deletePost('${p.id}')">✕</button>
         </div>`).join('')
     : '<div class="empty-state">No posts scheduled.</div>';
