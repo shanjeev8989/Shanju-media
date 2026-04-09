@@ -1202,6 +1202,7 @@ function renderShootCal() {
             <div style="font-size:13px;font-weight:600;">${s.client} — ${s.type === 'shoot' ? 'Shoot' : 'Meeting'}</div>
             <div style="font-size:12px;color:var(--muted);">${fmt(s.date)} · ${s.owner || ''} · ${s.notes || ''}</div>
           </div>
+          <button class="btn btn-sm btn-primary" style="font-size:11px;" onclick="openEditShoot('${s.id}')">Edit</button>
           <button class="btn btn-sm btn-danger" onclick="deleteShoot('${s.id}')">✕</button>
         </div>`).join('')
     : '<div class="empty-state">No shoots scheduled.</div>';
@@ -1541,7 +1542,21 @@ async function saveTask() {
   }
 }
 
+function openEditShoot(id) {
+  const s = shoots.find(s => s.id === id);
+  if (!s) return;
+  document.getElementById('modal-shoot-title').textContent = '✏️ Edit Shoot Day';
+  document.getElementById('sh-edit-id').value  = id;
+  document.getElementById('sh-client').value   = s.client || '';
+  document.getElementById('sh-date').value     = s.date || '';
+  document.getElementById('sh-type').value     = s.type || 'shoot';
+  document.getElementById('sh-owner').value    = s.owner || '';
+  document.getElementById('sh-notes').value    = s.notes || '';
+  openModal('modal-shoot');
+}
+
 async function saveShoot() {
+  const editId = document.getElementById('sh-edit-id').value;
   const client = document.getElementById('sh-client').value.trim();
   const date   = document.getElementById('sh-date').value;
   if (!client || !date) { toast('Client and date required.'); return; }
@@ -1551,8 +1566,15 @@ async function saveShoot() {
     owner: document.getElementById('sh-owner').value,
     notes: document.getElementById('sh-notes').value,
   };
-  const saved = await dbInsert('shoots', row);
-  if (saved) { shoots.push(saved); closeModal('modal-shoot'); renderShootCal(); }
+  if (editId) {
+    await dbUpdate('shoots', editId, row);
+    shoots = shoots.map(s => s.id === editId ? { ...s, ...row } : s);
+    closeModal('modal-shoot');
+    renderShootCal();
+  } else {
+    const saved = await dbInsert('shoots', row);
+    if (saved) { shoots.push(saved); closeModal('modal-shoot'); renderShootCal(); }
+  }
 }
 
 function openEditPost(id) {

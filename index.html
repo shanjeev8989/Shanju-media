@@ -375,7 +375,7 @@
           <div class="page-title">📷 Shoot Calendar</div>
           <div class="page-sub">Add and track all shoot days</div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="openModal('modal-shoot')">+ Add Shoot</button>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('sh-edit-id').value='';document.getElementById('modal-shoot-title').textContent='📷 Add Shoot Day';openModal('modal-shoot')">+ Add Shoot</button>
       </div>
       <div class="card">
         <div class="card-header">
@@ -689,10 +689,11 @@
   </div>
 </div>
 
-<!-- Add Shoot -->
+<!-- Add / Edit Shoot -->
 <div class="modal-overlay" id="modal-shoot">
   <div class="modal">
-    <div class="modal-title">📷 Add Shoot Day</div>
+    <div class="modal-title" id="modal-shoot-title">📷 Add Shoot Day</div>
+    <input type="hidden" id="sh-edit-id">
     <div class="form-grid">
       <div class="fg"><label>Client</label><input id="sh-client" placeholder="e.g. Vivaash"></div>
       <div class="fg"><label>Date</label><input type="date" id="sh-date"></div>
