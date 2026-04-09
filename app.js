@@ -144,7 +144,8 @@ async function loadAll(silent = false) {
       // Silent background reload: refresh dashboard counts + active page if it needs live data
       renderDash();
       const silentActivePage = document.querySelector('.page.active')?.id.replace('page-', '');
-      if (silentActivePage === 'expenses') renderExpenses();
+      if (silentActivePage === 'expenses')  renderExpenses();
+      if (silentActivePage === 'pipeline')  renderPipeline();
     }
   } catch (e) {
     setSyncError();
@@ -1340,7 +1341,47 @@ function showClientPipeline(client) {
 }
 
 function renderPipeline() {
-  // Populate client filter
+  // --- Today & Tomorrow posts from Post Calendar ---
+  const todayStr    = new Date().toISOString().split('T')[0];
+  const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
+  const captionPill = s => {
+    if (!s || s === 'Not Started') return '<span class="pill pill-neutral">Not Started</span>';
+    if (s === 'In Progress')       return '<span class="pill pill-warning">In Progress</span>';
+    if (s === 'Sent for Caption')  return '<span class="pill pill-warning">Sent for Caption</span>';
+    if (s === 'Caption Ready')     return '<span class="pill pill-success">Caption Ready</span>';
+    if (s === 'Exported')          return '<span class="pill pill-success">Exported ✓</span>';
+    return `<span class="pill pill-neutral">${s}</span>`;
+  };
+
+  const postRow = p => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+      <div style="flex:1;min-width:120px;">
+        <div style="font-size:13px;font-weight:600;">${p.client}</div>
+        <div style="font-size:11px;color:var(--muted);">${p.platform || '—'} · ${p.content_type || '—'}</div>
+        ${p.assigned_editor ? `<div style="font-size:11px;color:var(--p600);margin-top:2px;">✏ ${p.assigned_editor}</div>` : ''}
+      </div>
+      <div style="text-align:right;">${captionPill(p.caption_status)}</div>
+    </div>`;
+
+  const todayPosts    = posts.filter(p => p.date === todayStr);
+  const tomorrowPosts = posts.filter(p => p.date === tomorrowStr);
+
+  const todayBody    = document.getElementById('pl-today-body');
+  const tomorrowBody = document.getElementById('pl-tomorrow-body');
+  const todayCount   = document.getElementById('pl-today-count');
+  const tomorrowCount= document.getElementById('pl-tomorrow-count');
+
+  if (todayBody) todayBody.innerHTML = todayPosts.length
+    ? todayPosts.map(postRow).join('')
+    : '<div class="empty-state" style="padding:14px;">No posts scheduled today.</div>';
+  if (tomorrowBody) tomorrowBody.innerHTML = tomorrowPosts.length
+    ? tomorrowPosts.map(postRow).join('')
+    : '<div class="empty-state" style="padding:14px;">No posts scheduled tomorrow.</div>';
+  if (todayCount)    todayCount.textContent    = todayPosts.length ? `${todayPosts.length} posts` : '';
+  if (tomorrowCount) tomorrowCount.textContent = tomorrowPosts.length ? `${tomorrowPosts.length} posts` : '';
+
+  // --- Populate client filter ---
   const clientFilter = document.getElementById('pl-filter-client');
   if (clientFilter) {
     const clients = [...new Set(pipeline.map(p => p.client))].sort();

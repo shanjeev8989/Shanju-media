@@ -452,6 +452,28 @@
         </div>
       </div>
 
+      <!-- Today & Tomorrow posts from Post Calendar -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+        <div class="card" style="margin:0;">
+          <div class="card-header" style="background:var(--p50);">
+            <span class="card-title" style="color:var(--p700);">📅 Today's Posts</span>
+            <span id="pl-today-count" class="pill pill-neutral"></span>
+          </div>
+          <div class="card-body" style="padding:0;" id="pl-today-body">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+        <div class="card" style="margin:0;">
+          <div class="card-header">
+            <span class="card-title">📅 Tomorrow's Posts</span>
+            <span id="pl-tomorrow-count" class="pill pill-neutral"></span>
+          </div>
+          <div class="card-body" style="padding:0;" id="pl-tomorrow-body">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Global content table -->
       <div class="card" style="padding:0;">
         <div style="overflow-x:auto;">
@@ -1013,7 +1035,7 @@
 </div>
 
 <script src="config.js"></script>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 
 </body>
 </html>
