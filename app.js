@@ -727,15 +727,34 @@ function renderDash() {
 
   if (isOwner) {
     workloadCard.style.display = 'block';
-    const members = teamProfiles.map(p => p.name);
+    const todayStrW = new Date().toISOString().split('T')[0];
+    const members = teamProfiles.filter(p => p.role !== 'owner').map(p => p.name);
     document.getElementById('dash-workload').innerHTML = members.map(m => {
-      const mt  = tasks.filter(t => t.owner === m && t.status !== 'Exported' && !t.done);
-      const ov  = mt.filter(t => daysDiff(t.deadline) < 0).length;
-      const pct = Math.min(100, mt.length * 20);
-      return `<div style="margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">${avBadge(m)}
-        <span style="color:var(--muted);">${mt.length} tasks${ov ? ` · <span style="color:var(--danger);">${ov} overdue</span>` : ''}</span></div>
-        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>`;
+      // Daily plan tasks for today
+      const duRec       = dailyUpdates.find(d => d.member_name === m && d.update_date === todayStrW);
+      const dailyTasks  = duRec?.is_shoot_day ? [] : [...(duRec?.before_lunch||[]), ...(duRec?.after_lunch||[])];
+      const dailyDone   = dailyTasks.filter(t => t.status === 'completed').length;
+      const dailyTotal  = dailyTasks.length;
+      // Posts assigned to this member
+      const memberPosts = posts.filter(p => p.assigned_editor === m && p.caption_status !== 'Exported');
+      const isShootDay  = !!duRec?.is_shoot_day;
+      const noplan      = !duRec || !duRec.morning_done;
+
+      const label = isShootDay
+        ? `<span style="color:#15803d;font-size:11px;">🎬 Shoot Day</span>`
+        : noplan
+          ? `<span style="color:var(--danger);font-size:11px;">No plan</span>`
+          : `<span style="color:var(--muted);font-size:11px;">${dailyDone}/${dailyTotal} done · ${memberPosts.length} post${memberPosts.length !== 1 ? 's' : ''} pending</span>`;
+
+      const pct = isShootDay ? 100 : dailyTotal ? Math.round(dailyDone / dailyTotal * 100) : 0;
+      const barColor = pct === 100 ? 'var(--success)' : pct > 50 ? 'var(--warning)' : 'var(--p400)';
+
+      return `<div style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:3px;">
+          ${avBadge(m)} ${label}
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${barColor};"></div></div>
+      </div>`;
     }).join('');
   } else {
     workloadCard.style.display = 'none';
