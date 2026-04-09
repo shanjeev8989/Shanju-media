@@ -2277,6 +2277,8 @@ function fpDealDel(i)          { const a=FP.get('deals'); a.splice(i,1); FP.set(
 // Scoring: each reel = 30pts total (15 sent for caption + 15 exported)
 // Max 3 reels = 90pts + 10pts daily update = 100 max
 function calcDayScore(name, dayStr) {
+  // Shoot day = automatic 100 points
+  if (dailyUpdates.some(d => d.member_name === name && d.update_date === dayStr && d.is_shoot_day)) return 100;
   const mLow    = name.trim().toLowerCase();
   const exported = tasks.filter(t => t.owner?.trim().toLowerCase() === mLow && t.status === 'Exported' && expDate(t).startsWith(dayStr)).length
                  + posts.filter(p => p.assigned_editor?.trim().toLowerCase() === mLow && p.caption_status === 'Exported' && expDate(p).startsWith(dayStr)).length;
@@ -2589,19 +2591,48 @@ function renderDailyUpdate() {
         </div>
         <div class="card-body">
           ${carryHtml}
-          <div class="form-grid">
-            <div class="fg">
-              <label>Before Lunch — Tasks</label>
-              <textarea id="du-before" rows="5" placeholder="One task per line&#10;e.g. Edit Ramraj reel&#10;QC Gowtham footage&#10;Upload YouTube Short" style="font-size:13px;">${draftBefore}</textarea>
+          <div class="fg" style="margin-bottom:14px;">
+            <label>Day Type</label>
+            <select id="du-day-type" onchange="toggleShootDay()" style="font-size:13px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);width:100%;max-width:260px;">
+              <option value="regular">Regular Day</option>
+              <option value="shoot">🎬 Shoot Day</option>
+            </select>
+          </div>
+          <div id="du-task-section">
+            <div class="form-grid">
+              <div class="fg">
+                <label>Before Lunch — Tasks</label>
+                <textarea id="du-before" rows="5" placeholder="One task per line&#10;e.g. Edit Ramraj reel&#10;QC Gowtham footage&#10;Upload YouTube Short" style="font-size:13px;">${draftBefore}</textarea>
+              </div>
+              <div class="fg">
+                <label>After Lunch — Tasks</label>
+                <textarea id="du-after" rows="5" placeholder="One task per line&#10;e.g. Caption 3 posts&#10;Export final video&#10;Send for QC" style="font-size:13px;">${draftAfter}</textarea>
+              </div>
             </div>
-            <div class="fg">
-              <label>After Lunch — Tasks</label>
-              <textarea id="du-after" rows="5" placeholder="One task per line&#10;e.g. Caption 3 posts&#10;Export final video&#10;Send for QC" style="font-size:13px;">${draftAfter}</textarea>
-            </div>
+          </div>
+          <div id="du-shoot-notice" style="display:none;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:14px;margin-bottom:8px;">
+            <div style="font-size:14px;font-weight:600;color:#065f46;">🎬 Shoot Day — 100 points will be awarded automatically</div>
+            <div style="font-size:12px;color:#047857;margin-top:4px;">No tasks needed. Just submit to mark your attendance.</div>
           </div>
           <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
             <button class="btn btn-primary" onclick="saveMorningPlan()">Submit Morning Plan</button>
             <button class="btn" onclick="saveMorningDraft()">Save for Now</button>
+          </div>
+        </div>
+      </div>`;
+  } else if (todayRec.is_shoot_day) {
+    // Shoot day — no task list needed
+    html = `
+      <div class="card" style="border:2px solid #6ee7b7;">
+        <div class="card-header">
+          <span class="card-title">🎬 Shoot Day</span>
+          <span class="pill pill-success">Morning submitted ✓</span>
+        </div>
+        <div class="card-body">
+          <div style="background:#ecfdf5;border-radius:8px;padding:16px;text-align:center;">
+            <div style="font-size:24px;margin-bottom:6px;">🎬</div>
+            <div style="font-size:15px;font-weight:700;color:#065f46;">Shoot Day — 100 Points</div>
+            <div style="font-size:13px;color:#047857;margin-top:4px;">Great work on the shoot! No EOD tasks required.</div>
           </div>
         </div>
       </div>`;
@@ -2714,6 +2745,7 @@ async function loadDailyMonthData() {
   }
 
   const rows = records.map(rec => {
+    const isShoot = !!rec.is_shoot_day;
     const before = rec.before_lunch || [];
     const after  = rec.after_lunch  || [];
     const all    = [...before, ...after];
@@ -2725,6 +2757,14 @@ async function loadDailyMonthData() {
 
     const dayLabel = new Date(rec.update_date + 'T00:00:00').toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
     const safeId   = rec.update_date.replace(/-/g,'');
+
+    if (isShoot) {
+      return `<tr style="background:#f0fdf4;">
+        <td style="font-weight:600;">${dayLabel}</td>
+        <td colspan="6"><span style="background:#6ee7b7;color:#065f46;font-size:11px;padding:2px 10px;border-radius:20px;font-weight:700;">🎬 Shoot Day</span></td>
+        <td><span class="pill pill-success">100 pts</span></td>
+      </tr>`;
+    }
 
     const detailHtml = `<tr id="mdetail-${safeId}" style="display:none;background:var(--bg);">
       <td colspan="8" style="padding:12px 16px;">
@@ -2782,6 +2822,14 @@ function onEodStatusChange(section, idx) {
   if (wrap) wrap.style.display = (val === 'not_done' || val === 'in_progress') ? 'block' : 'none';
 }
 
+function toggleShootDay() {
+  const isShoot = document.getElementById('du-day-type')?.value === 'shoot';
+  const taskSec = document.getElementById('du-task-section');
+  const notice  = document.getElementById('du-shoot-notice');
+  if (taskSec) taskSec.style.display = isShoot ? 'none' : 'block';
+  if (notice)  notice.style.display  = isShoot ? 'block' : 'none';
+}
+
 async function saveMorningDraft() {
   const todayStr = new Date().toISOString().split('T')[0];
   const beforeVal = document.getElementById('du-before')?.value || '';
@@ -2811,15 +2859,16 @@ async function saveMorningDraft() {
 }
 
 async function saveMorningPlan() {
-  const before = (document.getElementById('du-before')?.value || '')
+  const isShoot = document.getElementById('du-day-type')?.value === 'shoot';
+  const before = isShoot ? [] : (document.getElementById('du-before')?.value || '')
     .split('\n').map(s => s.trim()).filter(Boolean).map(task => ({ task, status:'', reason:'' }));
-  const after  = (document.getElementById('du-after')?.value || '')
+  const after  = isShoot ? [] : (document.getElementById('du-after')?.value || '')
     .split('\n').map(s => s.trim()).filter(Boolean).map(task => ({ task, status:'', reason:'' }));
 
-  if (!before.length && !after.length) { toast('Add at least one task.'); return; }
+  if (!isShoot && !before.length && !after.length) { toast('Add at least one task.'); return; }
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const row = { member_name: currentUser, update_date: todayStr, before_lunch: before, after_lunch: after, morning_done: true, eod_done: false };
+  const row = { member_name: currentUser, update_date: todayStr, before_lunch: before, after_lunch: after, morning_done: true, eod_done: isShoot, is_shoot_day: isShoot };
 
   setSyncing(); _markLocalWrite();
   const { data, error } = await sb.from('daily_updates').upsert([row], { onConflict: 'member_name,update_date' }).select();

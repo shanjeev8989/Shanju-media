@@ -1,3 +1,11 @@
+## Step 11 — Shoot Day column (run after Step 10)
+
+```sql
+ALTER TABLE daily_updates ADD COLUMN IF NOT EXISTS is_shoot_day boolean DEFAULT false;
+```
+
+---
+
 ## Step 10 — Daily Expenses table (run in Supabase SQL editor)
 
 ```sql
