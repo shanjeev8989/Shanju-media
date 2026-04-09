@@ -1232,6 +1232,7 @@ function renderPostCal() {
               · <span style="background:var(--p100);color:var(--p900);font-size:11px;padding:1px 7px;border-radius:20px;font-weight:600;">${p.assigned_editor || 'Unassigned'}</span>
             </div>
           </div>
+          <button class="btn btn-sm" onclick="openEditPost('${p.id}')">✏️</button>
           <button class="btn btn-sm btn-danger" onclick="deletePost('${p.id}')">✕</button>
         </div>`).join('')
     : '<div class="empty-state">No posts scheduled.</div>';
@@ -1554,7 +1555,24 @@ async function saveShoot() {
   if (saved) { shoots.push(saved); closeModal('modal-shoot'); renderShootCal(); }
 }
 
+function openEditPost(id) {
+  const p = posts.find(p => p.id === id);
+  if (!p) return;
+  populateEditorDropdown();
+  document.getElementById('modal-post-title').textContent = '✏️ Edit Post Day';
+  document.getElementById('po-edit-id').value   = id;
+  document.getElementById('po-client').value    = p.client || '';
+  document.getElementById('po-date').value      = p.date || '';
+  document.getElementById('po-platform').value  = p.platform || 'Instagram';
+  document.getElementById('po-ctype').value     = p.content_type || 'Storytelling Reel';
+  document.getElementById('po-cap').value       = p.caption_status || 'Pending';
+  document.getElementById('po-editor').value    = p.assigned_editor || '';
+  document.getElementById('po-notes').value     = p.notes || '';
+  openModal('modal-post');
+}
+
 async function savePost() {
+  const editId = document.getElementById('po-edit-id').value;
   const client = document.getElementById('po-client').value.trim();
   const date   = document.getElementById('po-date').value;
   if (!client || !date) { toast('Client and date required.'); return; }
@@ -1568,9 +1586,19 @@ async function savePost() {
     assigned_editor:  document.getElementById('po-editor').value || null,
     notes:            document.getElementById('po-notes').value,
   };
-  const saved = await dbInsert('posts', row);
-  if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
-  if (saved) { posts.push(saved); closeModal('modal-post'); renderPostCal(); }
+  if (editId) {
+    // Edit mode
+    await dbUpdate('posts', editId, row);
+    posts = posts.map(p => p.id === editId ? { ...p, ...row } : p);
+    if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+    closeModal('modal-post');
+    renderPostCal();
+  } else {
+    // Add mode
+    const saved = await dbInsert('posts', row);
+    if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+    if (saved) { posts.push(saved); closeModal('modal-post'); renderPostCal(); }
+  }
 }
 
 async function savePipeline() {

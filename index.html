@@ -412,7 +412,7 @@
             style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
             <option value="">All clients</option>
           </select>
-          <button class="btn btn-primary btn-sm" onclick="populateEditorDropdown();openModal('modal-post')">+ Add Post Day</button>
+          <button class="btn btn-primary btn-sm" onclick="populateEditorDropdown();document.getElementById('po-edit-id').value='';document.getElementById('modal-post-title').textContent='📅 Add Post Day';openModal('modal-post')">+ Add Post Day</button>
         </div>
       </div>
       <div class="card">
@@ -711,10 +711,11 @@
   </div>
 </div>
 
-<!-- Add Post Day -->
+<!-- Add / Edit Post Day -->
 <div class="modal-overlay" id="modal-post">
   <div class="modal">
-    <div class="modal-title">📅 Add Post Day</div>
+    <div class="modal-title" id="modal-post-title">📅 Add Post Day</div>
+    <input type="hidden" id="po-edit-id">
     <div class="form-grid">
       <div class="fg"><label>Client</label><input id="po-client" placeholder="e.g. Ramraj"></div>
       <div class="fg"><label>Date</label><input type="date" id="po-date"></div>
