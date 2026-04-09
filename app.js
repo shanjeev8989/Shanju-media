@@ -728,7 +728,7 @@ function renderDash() {
   if (isOwner) {
     workloadCard.style.display = 'block';
     const todayStrW = new Date().toISOString().split('T')[0];
-    const members = teamProfiles.filter(p => p.role !== 'owner').map(p => p.name);
+    const members = teamProfiles.filter(p => p.role === 'editor').map(p => p.name);
     document.getElementById('dash-workload').innerHTML = members.map(m => {
       // Daily plan tasks for today
       const duRec       = dailyUpdates.find(d => d.member_name === m && d.update_date === todayStrW);
