@@ -654,7 +654,7 @@ function renderDash() {
 
   // Build combined items (tasks + posts) for urgent/focus sections
   const dashTaskSrc = isOwner ? allActive : myActive;
-  const dashPostSrc = isOwner ? posts : myPosts;
+  const dashPostSrc = isOwner ? posts.filter(p => p.caption_status !== 'Exported') : myPosts;
 
   // Normalise posts into same shape as tasks for display
   const dashItems = [
@@ -1107,7 +1107,7 @@ function renderAllTasks() {
     ? f.map(t => `<tr>
         <td style="font-weight:600;">${t.client}</td><td>${t.name}</td>
         <td><span style="font-size:11px;color:var(--muted);">${t.type || ''}</span></td>
-        <td>${avBadge(t.owner)}</td><td>${ddPill(t.deadline)}</td>
+        <td>${avBadge(t.owner)}</td><td>${t.status === 'Exported' ? '—' : ddPill(t.deadline)}</td>
         <td>${statusCell(t)}</td>
         <td>${t._isPost ? '<span style="font-size:11px;color:var(--muted);">—</span>' : priPill(t.priority)}</td>
         <td style="font-size:11px;color:${t.blocker && t.blocker !== 'None' ? 'var(--warning)' : 'var(--muted)'};">${t.blocker || '—'}</td>
@@ -1259,7 +1259,7 @@ function showTeamDetail(m) {
       <td style="font-weight:600;">${t.client}</td>
       <td>${t.name}</td>
       <td>${statusPill(t.status || 'Active')}</td>
-      <td>${ddPill(t.deadline)}</td>
+      <td>${t.status === 'Exported' ? '—' : ddPill(t.deadline)}</td>
       <td style="font-size:11px;color:var(--muted);">${t.next_step || ''}</td>
     </tr>`
   );
@@ -1268,7 +1268,7 @@ function showTeamDetail(m) {
       <td style="font-weight:600;">${p.client}</td>
       <td>${(p.content_type || 'Post') + ' 📅'}</td>
       <td>${statusPill(captionToStatus(p.caption_status))}</td>
-      <td>${ddPill(p.date)}</td>
+      <td>${p.caption_status === 'Exported' ? '—' : ddPill(p.date)}</td>
       <td style="font-size:11px;color:var(--muted);">${p.platform || ''}</td>
     </tr>`
   );
