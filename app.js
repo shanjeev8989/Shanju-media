@@ -547,11 +547,10 @@ function renderDash() {
   document.getElementById('focus-title').textContent = isOwner ? '🎯 Founder Focus Today' : '🎯 My Focus Today';
 
   // Active tasks for current user scope
-  console.log('[DEBUG] renderDash — tasks.length:', tasks.length, 'role:', currentProfile?.role);
   const allActive = tasks.filter(t => t.status !== 'Exported' && !t.done);
   const cuLower   = currentUser.trim().toLowerCase();
   const myActive  = allActive.filter(t => t.owner && t.owner.trim().toLowerCase() === cuLower);
-  const myPosts   = posts.filter(p => p.assigned_editor === currentUser);
+  const myPosts   = posts.filter(p => p.assigned_editor === currentUser && p.caption_status !== 'Exported');
   const overdue   = myActive.filter(t => daysDiff(t.deadline) < 0);
   const dueToday  = myActive.filter(t => daysDiff(t.deadline) === 0);
   const review    = myActive.filter(t => t.status === 'Sent for Caption');
@@ -941,7 +940,7 @@ function renderMyTasks() {
       : '',
   }));
 
-  const postRows = myPosts.map(p => ({
+  const postRows = myPosts.filter(p => p.caption_status !== 'Exported').map(p => ({
     _isHigh: false,
     _date:   p.date ? new Date(p.date) : new Date('9999-12-31'),
     client:  p.client,

@@ -740,6 +740,65 @@
       <div id="team-daily-body"><div class="loading"><div class="spinner"></div>Loading...</div></div>
     </div>
 
+    <!-- =====================================================
+         IDEAS PAGE (founder only)
+         ===================================================== -->
+    <div class="page" id="page-ideas">
+      <div class="topbar">
+        <div>
+          <div class="page-title">💡 Ideas</div>
+          <div class="page-sub">Capture, organize and execute your content ideas</div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openAddIdea()">+ New Idea</button>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metric-grid" id="idea-metrics" style="margin-bottom:16px;"></div>
+
+      <!-- Quick Add -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-body" style="padding:12px;">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span style="font-size:18px;">💡</span>
+            <input id="idea-quick-title" type="text" placeholder="Quick idea... press Enter to capture"
+              style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);font-size:13px;background:var(--w);"
+              onkeydown="if(event.key==='Enter') quickAddIdea()">
+            <button class="btn btn-primary btn-sm" onclick="quickAddIdea()">Add</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- View Tabs + Filters -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;" id="idea-tabs">
+            <button class="btn btn-sm btn-primary" onclick="setIdeaView('all',this)">All Ideas</button>
+            <button class="btn btn-sm" onclick="setIdeaView('kanban',this)">🗂 Kanban</button>
+            <button class="btn btn-sm" onclick="setIdeaView('brand',this)">By Brand</button>
+            <button class="btn btn-sm" onclick="setIdeaView('type',this)">By Type</button>
+            <button class="btn btn-sm" onclick="setIdeaView('category',this)">By Category</button>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <select id="idea-filter-brand" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);"><option value="">All Brands</option></select>
+            <select id="idea-filter-type" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);">
+              <option value="">All Types</option><option>Short Form</option><option>Long Form</option>
+            </select>
+            <select id="idea-filter-category" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);"><option value="">All Categories</option></select>
+            <select id="idea-filter-status" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);"><option value="">All Status</option></select>
+            <select id="idea-filter-priority" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);">
+              <option value="">All Priority</option><option>High</option><option>Medium</option><option>Low</option>
+            </select>
+            <select id="idea-filter-exec" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);">
+              <option value="">All Execution</option><option value="Execute This Week">This Week</option><option value="Park for Later">Parked</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ideas Body -->
+      <div id="ideas-body"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+    </div>
+
   </div><!-- end content -->
 </div><!-- end shell -->
 
@@ -1056,65 +1115,6 @@
 </div>
 
 <!-- =====================================================
-     IDEAS PAGE (founder only)
-     ===================================================== -->
-<div class="page" id="page-ideas">
-  <div class="topbar">
-    <div>
-      <div class="page-title">💡 Ideas</div>
-      <div class="page-sub">Capture, organize and execute your content ideas</div>
-    </div>
-    <button class="btn btn-primary btn-sm" onclick="openAddIdea()">+ New Idea</button>
-  </div>
-
-  <!-- Metrics -->
-  <div class="metric-grid" id="idea-metrics" style="margin-bottom:16px;"></div>
-
-  <!-- Quick Add -->
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-body" style="padding:12px;">
-      <div style="display:flex;gap:8px;align-items:center;">
-        <span style="font-size:18px;">💡</span>
-        <input id="idea-quick-title" type="text" placeholder="Quick idea... press Enter to capture"
-          style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);font-size:13px;background:var(--w);"
-          onkeydown="if(event.key==='Enter') quickAddIdea()">
-        <button class="btn btn-primary btn-sm" onclick="quickAddIdea()">Add</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- View Tabs + Filters -->
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px;">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="idea-tabs">
-        <button class="btn btn-sm btn-primary" onclick="setIdeaView('all',this)">All Ideas</button>
-        <button class="btn btn-sm" onclick="setIdeaView('kanban',this)">🗂 Kanban</button>
-        <button class="btn btn-sm" onclick="setIdeaView('brand',this)">By Brand</button>
-        <button class="btn btn-sm" onclick="setIdeaView('type',this)">By Type</button>
-        <button class="btn btn-sm" onclick="setIdeaView('category',this)">By Category</button>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <select id="idea-filter-brand" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);"><option value="">All Brands</option></select>
-        <select id="idea-filter-type" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);">
-          <option value="">All Types</option><option>Short Form</option><option>Long Form</option>
-        </select>
-        <select id="idea-filter-category" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);"><option value="">All Categories</option></select>
-        <select id="idea-filter-status" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);"><option value="">All Status</option></select>
-        <select id="idea-filter-priority" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);">
-          <option value="">All Priority</option><option>High</option><option>Medium</option><option>Low</option>
-        </select>
-        <select id="idea-filter-exec" onchange="renderIdeas()" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--w);">
-          <option value="">All Execution</option><option value="Execute This Week">This Week</option><option value="Park for Later">Parked</option>
-        </select>
-      </div>
-    </div>
-  </div>
-
-  <!-- Ideas Body -->
-  <div id="ideas-body"><div class="loading"><div class="spinner"></div>Loading...</div></div>
-</div>
-
-<!-- =====================================================
      IDEA MODAL
      ===================================================== -->
 <div class="modal-overlay" id="modal-idea">
@@ -1187,7 +1187,7 @@
 </div>
 
 <script src="config.js"></script>
-<script src="app.js?v=12"></script>
+<script src="app.js?v=14"></script>
 
 </body>
 </html>
