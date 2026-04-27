@@ -2178,11 +2178,10 @@ function fpMsgDel(i)    { const k='msgs_'+FP.today(); const a=FP.get(k); a.splic
 // ── DAILY TO-DO ────────────────────────────────────
 function fpDailyTodo() {
   const todos = FP.get('daily_'+FP.today());
-  const statusIcon = s => s==='done'?'✅':s==='skip'?'⏭':'⏳';
   const statusColor = s => s==='done'?'var(--success)':s==='skip'?'var(--muted)':'var(--warning)';
   const rows = todos.map((t,i) => `
     <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
-      <span style="font-size:16px;cursor:pointer;" onclick="fpTodoCycle(${i})" title="Click to change status">${statusIcon(t.status)}</span>
+      <button onclick="fpTodoCycle(${i})" style="flex-shrink:0;width:24px;height:24px;border-radius:50%;border:2px solid ${t.status==='done'?'var(--success)':t.status==='skip'?'var(--muted)':'var(--border)'};background:${t.status==='done'?'var(--success)':t.status==='skip'?'var(--muted)':'transparent'};color:white;font-size:11px;cursor:pointer;" title="Click to mark done / skip">${t.status==='done'?'✓':t.status==='skip'?'–':''}</button>
       <div style="flex:1;font-size:13px;${t.status==='done'?'text-decoration:line-through;color:var(--muted);':t.status==='skip'?'color:var(--muted);':''}">${t.text}</div>
       <span style="font-size:10px;font-weight:700;color:${statusColor(t.status)};">${t.status||'todo'}</span>
       <button onclick="fpTodoDel(${i})" style="color:var(--muted);background:none;border:none;cursor:pointer;font-size:16px;padding:0 4px;">×</button>
