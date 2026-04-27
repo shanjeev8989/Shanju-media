@@ -2178,12 +2178,12 @@ function fpMsgDel(i)    { const k='msgs_'+FP.today(); const a=FP.get(k); a.splic
 // ── DAILY TO-DO ────────────────────────────────────
 function fpDailyTodo() {
   const todos = FP.get('daily_'+FP.today());
-  const statusColor = s => s==='done'?'var(--success)':s==='skip'?'var(--muted)':'var(--warning)';
   const rows = todos.map((t,i) => `
-    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
-      <button onclick="fpTodoCycle(${i})" style="flex-shrink:0;width:24px;height:24px;border-radius:50%;border:2px solid ${t.status==='done'?'var(--success)':t.status==='skip'?'var(--muted)':'var(--border)'};background:${t.status==='done'?'var(--success)':t.status==='skip'?'var(--muted)':'transparent'};color:white;font-size:11px;cursor:pointer;" title="Click to mark done / skip">${t.status==='done'?'✓':t.status==='skip'?'–':''}</button>
-      <div style="flex:1;font-size:13px;${t.status==='done'?'text-decoration:line-through;color:var(--muted);':t.status==='skip'?'color:var(--muted);':''}">${t.text}</div>
-      <span style="font-size:10px;font-weight:700;color:${statusColor(t.status)};">${t.status||'todo'}</span>
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+      <input type="checkbox" ${t.status==='done'?'checked':''} onchange="fpTodoCycle(${i})"
+        style="flex-shrink:0;width:18px;height:18px;cursor:pointer;accent-color:var(--success);">
+      <div style="flex:1;font-size:13px;${t.status==='done'?'text-decoration:line-through;color:var(--muted);':''}">${t.text}</div>
+      ${t.status==='skip'?'<span style="font-size:10px;color:var(--muted);">skipped</span>':''}
       <button onclick="fpTodoDel(${i})" style="color:var(--muted);background:none;border:none;cursor:pointer;font-size:16px;padding:0 4px;">×</button>
     </div>`).join('');
   const done = todos.filter(t=>t.status==='done').length;
@@ -2209,8 +2209,7 @@ function fpTodoAdd() {
 }
 function fpTodoCycle(i) {
   const k='daily_'+FP.today(); const a=FP.get(k);
-  const cycle = {todo:'done', done:'skip', skip:'todo'};
-  a[i].status = cycle[a[i].status||'todo'];
+  a[i].status = (a[i].status === 'done') ? 'todo' : 'done';
   FP.set(k,a); renderFounderPanel();
 }
 function fpTodoDel(i) { const k='daily_'+FP.today(); const a=FP.get(k); a.splice(i,1); FP.set(k,a); renderFounderPanel(); }
