@@ -3070,12 +3070,14 @@ async function saveEodUpdate() {
 // ---- TEAM DAILY ----
 
 function teamDailyPrev() {
-  const d = new Date(teamDailyViewDate + 'T00:00:00'); d.setDate(d.getDate() - 1);
-  teamDailyViewDate = d.toISOString().split('T')[0]; renderTeamDaily();
+  const [y, mo, day] = teamDailyViewDate.split('-').map(Number);
+  teamDailyViewDate = new Date(Date.UTC(y, mo - 1, day - 1)).toISOString().split('T')[0];
+  renderTeamDaily();
 }
 function teamDailyNext() {
-  const d = new Date(teamDailyViewDate + 'T00:00:00'); d.setDate(d.getDate() + 1);
-  teamDailyViewDate = d.toISOString().split('T')[0]; renderTeamDaily();
+  const [y, mo, day] = teamDailyViewDate.split('-').map(Number);
+  teamDailyViewDate = new Date(Date.UTC(y, mo - 1, day + 1)).toISOString().split('T')[0];
+  renderTeamDaily();
 }
 
 async function renderTeamDaily() {
