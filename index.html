@@ -461,60 +461,22 @@
     <div class="page" id="page-pipeline">
       <div class="topbar">
         <div>
-          <div class="page-title">🚀 Posting Pipeline</div>
-          <div class="page-sub">Track every content item from idea to posted</div>
+          <div class="page-title">🚀 Posting Schedule</div>
+          <div class="page-sub">Monthly content tracker</div>
         </div>
-        <div class="btn-row">
+        <div class="btn-row" style="flex-wrap:wrap;gap:6px;">
+          <button class="btn btn-sm" onclick="plMonthPrev()">&#9664;</button>
+          <span id="pl-month-label" style="font-size:13px;font-weight:600;min-width:150px;text-align:center;"></span>
+          <button class="btn btn-sm" onclick="plMonthNext()">&#9654;</button>
           <select id="pl-filter-client" onchange="renderPipeline()"
             style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--w);">
-            <option value="">All clients</option>
+            <option value="">All Clients</option>
           </select>
-          <button class="btn btn-primary btn-sm" onclick="openModal('modal-pipeline')">+ Add Content</button>
+          <button class="btn btn-primary btn-sm" onclick="openModal('modal-pipeline')">+ Add</button>
         </div>
       </div>
 
-      <!-- Today & Tomorrow posts from Post Calendar -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-        <div class="card" style="margin:0;">
-          <div class="card-header" style="background:var(--p50);">
-            <span class="card-title" style="color:var(--p700);">📅 Today's Posts</span>
-            <span id="pl-today-count" class="pill pill-neutral"></span>
-          </div>
-          <div class="card-body" style="padding:0;" id="pl-today-body">
-            <div class="loading"><div class="spinner"></div></div>
-          </div>
-        </div>
-        <div class="card" style="margin:0;">
-          <div class="card-header">
-            <span class="card-title">📅 Tomorrow's Posts</span>
-            <span id="pl-tomorrow-count" class="pill pill-neutral"></span>
-          </div>
-          <div class="card-body" style="padding:0;" id="pl-tomorrow-body">
-            <div class="loading"><div class="spinner"></div></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Global content table -->
-      <div class="card" style="padding:0;">
-        <div style="overflow-x:auto;">
-          <table style="min-width:900px;">
-            <thead><tr><th>Client</th><th>Content</th><th>Status</th><th>Platform</th><th>Planned Date</th><th>Posted Date</th><th>Gap</th><th>Update Status</th><th></th></tr></thead>
-            <tbody id="pipeline-body"><tr><td colspan="9" class="loading"><div class="spinner"></div></td></tr></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Client detail view (shown on row click) -->
-      <div id="pipeline-client-detail" style="display:none;">
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title" id="client-pipeline-name"></span>
-            <button class="btn btn-sm" onclick="document.getElementById('pipeline-client-detail').style.display='none'">✕ Close</button>
-          </div>
-          <div class="card-body" id="client-pipeline-body"></div>
-        </div>
-      </div>
+      <div id="pipeline-body"><div class="loading"><div class="spinner"></div>Loading...</div></div>
     </div>
 
 
@@ -1187,7 +1149,7 @@
 </div>
 
 <script src="config.js"></script>
-<script src="app.js?v=18"></script>
+<script src="app.js?v=19"></script>
 
 </body>
 </html>

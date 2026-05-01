@@ -37,6 +37,7 @@ let currentUser = 'Shanju';
 let currentProfile = null; // { id, name, role }  — set after login
 let shootCalMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let postCalMonth  = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let pipelineMonth = new Date().toISOString().slice(0, 7);
 const TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
 
 // Video task types — creating one of these auto-adds to the pipeline
@@ -1432,84 +1433,130 @@ function showClientPipeline(client) {
   document.getElementById('pipeline-client-detail').scrollIntoView({ behavior: 'smooth' });
 }
 
+function plMonthPrev() {
+  const [y, m] = pipelineMonth.split('-').map(Number);
+  pipelineMonth = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+  renderPipeline();
+}
+function plMonthNext() {
+  const [y, m] = pipelineMonth.split('-').map(Number);
+  pipelineMonth = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 7);
+  renderPipeline();
+}
+
 function renderPipeline() {
-  // --- Today & Tomorrow posts from Post Calendar ---
-  const todayStr    = new Date().toISOString().split('T')[0];
-  const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const todayStr = new Date().toISOString().split('T')[0];
 
-  const captionPill = s => {
-    if (!s || s === 'Not Started') return '<span class="pill pill-neutral">Not Started</span>';
-    if (s === 'In Progress')       return '<span class="pill pill-warning">In Progress</span>';
-    if (s === 'Sent for Caption')  return '<span class="pill pill-warning">Sent for Caption</span>';
-    if (s === 'Caption Ready')     return '<span class="pill pill-success">Caption Ready</span>';
-    if (s === 'Exported')          return '<span class="pill pill-success">Exported ✓</span>';
-    return `<span class="pill pill-neutral">${s}</span>`;
-  };
+  // Month label
+  const [my, mm] = pipelineMonth.split('-').map(Number);
+  const monthLabel = new Date(Date.UTC(my, mm - 1, 1)).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const mlEl = document.getElementById('pl-month-label');
+  if (mlEl) mlEl.textContent = monthLabel;
 
-  const postRow = p => `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
-      <div style="flex:1;min-width:120px;">
-        <div style="font-size:13px;font-weight:600;">${p.client}</div>
-        <div style="font-size:11px;color:var(--muted);">${p.platform || '—'} · ${p.content_type || '—'}</div>
-        ${p.assigned_editor ? `<div style="font-size:11px;color:var(--p600);margin-top:2px;">✏ ${p.assigned_editor}</div>` : ''}
-      </div>
-      <div style="text-align:right;">${captionPill(p.caption_status)}</div>
-    </div>`;
-
-  const todayPosts    = posts.filter(p => p.date === todayStr);
-  const tomorrowPosts = posts.filter(p => p.date === tomorrowStr);
-
-  const todayBody    = document.getElementById('pl-today-body');
-  const tomorrowBody = document.getElementById('pl-tomorrow-body');
-  const todayCount   = document.getElementById('pl-today-count');
-  const tomorrowCount= document.getElementById('pl-tomorrow-count');
-
-  if (todayBody) todayBody.innerHTML = todayPosts.length
-    ? todayPosts.map(postRow).join('')
-    : '<div class="empty-state" style="padding:14px;">No posts scheduled today.</div>';
-  if (tomorrowBody) tomorrowBody.innerHTML = tomorrowPosts.length
-    ? tomorrowPosts.map(postRow).join('')
-    : '<div class="empty-state" style="padding:14px;">No posts scheduled tomorrow.</div>';
-  if (todayCount)    todayCount.textContent    = todayPosts.length ? `${todayPosts.length} posts` : '';
-  if (tomorrowCount) tomorrowCount.textContent = tomorrowPosts.length ? `${tomorrowPosts.length} posts` : '';
-
-  // --- Populate client filter ---
+  // Client filter
   const clientFilter = document.getElementById('pl-filter-client');
   if (clientFilter) {
     const clients = [...new Set(pipeline.map(p => p.client))].sort();
-    const current = clientFilter.value;
+    const cur = clientFilter.value;
     clientFilter.innerHTML = '<option value="">All Clients</option>' +
-      clients.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`).join('');
+      clients.map(c => `<option value="${c}" ${c === cur ? 'selected' : ''}>${c}</option>`).join('');
+  }
+  const filterClient = clientFilter ? clientFilter.value : '';
+
+  // Filter to month + client
+  let items = pipeline.filter(p => (p.planned_date || '').startsWith(pipelineMonth));
+  if (filterClient) items = items.filter(p => p.client === filterClient);
+
+  const isReel = p => /reel|short/i.test(p.content_title || '') || /reel|short/i.test(p.platform || '') || /reel|short/i.test(p.content_type || '');
+
+  // Split today vs rest
+  const todayItems = items.filter(p => p.planned_date === todayStr)
+    .sort((a, b) => (isReel(b) ? 1 : 0) - (isReel(a) ? 1 : 0) || (a.client || '').localeCompare(b.client || ''));
+
+  const restItems = items.filter(p => p.planned_date !== todayStr)
+    .sort((a, b) => {
+      if (!a.is_posted && b.is_posted) return -1;
+      if (a.is_posted && !b.is_posted) return 1;
+      return (a.planned_date || '').localeCompare(b.planned_date || '');
+    });
+
+  const toggleBtn = (p, field, label, icon, col) => {
+    const on = !!p[field];
+    return `<button onclick="togglePipelineFlag('${p.id}','${field}')"
+      style="padding:5px 11px;border-radius:20px;border:1.5px solid ${on ? col : 'var(--border)'};
+      background:${on ? col : 'transparent'};color:${on ? '#fff' : 'var(--muted)'};
+      font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.15s;">
+      ${icon} ${label}</button>`;
+  };
+
+  const renderRow = (p, isToday) => {
+    const isPast = p.planned_date && p.planned_date < todayStr && !p.is_posted;
+    const dateLabel = p.planned_date
+      ? new Date(p.planned_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+      : '—';
+    const dateBg   = isToday ? '#ede9fe' : isPast ? '#fef2f2' : '#f9fafb';
+    const dateTxt  = isToday ? 'var(--p700)' : isPast ? 'var(--danger)' : 'var(--muted)';
+    const rowBg    = isToday ? '#faf8ff' : p.is_posted ? '#f0fdf4' : 'transparent';
+
+    return `<div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border);background:${rowBg};flex-wrap:wrap;">
+      <div style="flex-shrink:0;width:52px;text-align:center;padding:4px 6px;border-radius:8px;background:${dateBg};">
+        <div style="font-size:11px;font-weight:700;color:${dateTxt};">${isToday ? 'TODAY' : dateLabel}</div>
+        ${isReel(p) ? '<div style="font-size:9px;background:#ede9fe;color:var(--p700);padding:1px 5px;border-radius:10px;margin-top:2px;font-weight:700;">REEL</div>' : ''}
+      </div>
+      <div style="flex:1;min-width:100px;">
+        <div style="font-size:13px;font-weight:600;">${p.client}</div>
+        <div style="font-size:11px;color:var(--muted);">${p.content_title || '—'} · ${p.platform || '—'}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${toggleBtn(p, 'is_exported',    'Exported',   '🎬', '#10b981')}
+        ${toggleBtn(p, 'client_approved','Client OK',  '✅', '#7c3aed')}
+        ${toggleBtn(p, 'is_posted',      'Posted',     '📤', '#2563eb')}
+      </div>
+      ${currentProfile?.role === 'owner'
+        ? `<button onclick="deletePL('${p.id}')" style="color:var(--muted);background:none;border:none;cursor:pointer;font-size:18px;line-height:1;padding:0 2px;">×</button>`
+        : ''}
+    </div>`;
+  };
+
+  let html = '';
+
+  if (todayItems.length) {
+    const todayHeading = new Date(todayStr + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
+    html += `<div class="card" style="margin-bottom:16px;border:2px solid var(--p300);">
+      <div class="card-header" style="background:var(--p50);">
+        <span class="card-title" style="color:var(--p700);">📅 Today — ${todayHeading}</span>
+        <span class="pill pill-neutral">${todayItems.length} post${todayItems.length > 1 ? 's' : ''}</span>
+      </div>
+      ${todayItems.map(p => renderRow(p, true)).join('')}
+    </div>`;
   }
 
-  const filterClient = clientFilter ? clientFilter.value : '';
-  const filtered = filterClient ? pipeline.filter(p => p.client === filterClient) : pipeline;
+  if (restItems.length) {
+    html += `<div class="card" style="padding:0;">
+      <div class="card-header">
+        <span class="card-title">📆 ${monthLabel}</span>
+        <span class="pill pill-neutral">${restItems.length} post${restItems.length > 1 ? 's' : ''}</span>
+      </div>
+      ${restItems.map(p => renderRow(p, false)).join('')}
+    </div>`;
+  }
 
-  document.getElementById('pipeline-body').innerHTML = filtered.length
-    ? filtered.map(p => {
-        const status = getContentStatus(p);
-        const plannedD = p.planned_date ? fmt(p.planned_date) : '—';
-        const postedD  = p.posted_date  ? fmt(p.posted_date)  : '—';
-        const gap = (p.planned_date && p.posted_date)
-          ? Math.round((new Date(p.posted_date) - new Date(p.planned_date)) / 86400000) + 'd'
-          : status === 'Posted' ? '—' : (p.planned_date ? `${daysDiff(p.planned_date)}d` : '—');
-        return `<tr>
-          <td style="font-weight:700;cursor:pointer;color:var(--p600);" onclick="showClientPipeline('${p.client}')">${p.client}</td>
-          <td>${p.content_title || '—'}</td>
-          <td>${contentStatusPill(status)}</td>
-          <td style="font-size:12px;color:var(--muted);">${p.platform || '—'}</td>
-          <td style="font-size:12px;">${plannedD}</td>
-          <td style="font-size:12px;">${postedD}</td>
-          <td style="font-size:12px;color:var(--muted);">${gap}</td>
-          <td>
-            <select onchange="updateContentStatus('${p.id}', this.value)" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);">
-              ${CONTENT_STATUSES.map(s => `<option value="${s}" ${s === status ? 'selected' : ''}>${s}</option>`).join('')}
-            </select>
-          </td>
-          <td><button class="btn btn-sm btn-danger" onclick="deletePL('${p.id}')">✕</button></td>
-        </tr>`;
-      }).join('')
-    : `<tr><td colspan="9" class="empty-state">No content in pipeline.</td></tr>`;
+  if (!html) {
+    html = `<div class="card"><div class="card-body"><div class="empty-state">No content scheduled for ${monthLabel}.</div></div></div>`;
+  }
+
+  document.getElementById('pipeline-body').innerHTML = html;
+}
+
+async function togglePipelineFlag(id, field) {
+  const item = pipeline.find(p => p.id === id);
+  if (!item) return;
+  const newVal = !item[field];
+  const updates = { [field]: newVal };
+  if (field === 'is_posted') updates.posted_date = newVal ? new Date().toISOString().split('T')[0] : null;
+  await dbUpdate('pipeline', id, updates);
+  pipeline = pipeline.map(p => p.id === id ? { ...p, ...updates } : p);
+  renderPipeline();
 }
 
 async function deletePL(id) { await dbDelete('pipeline', id); pipeline = pipeline.filter(p => p.id !== id); renderPipeline(); }
