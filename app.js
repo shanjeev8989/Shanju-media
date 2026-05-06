@@ -3355,9 +3355,15 @@ function renderExpenses() {
   const mfEl = document.getElementById('exp-filter-month');
   if (mfEl && !mfEl.value) mfEl.value = thisMonth;
 
-  // Summary (always full data, ignores filters)
+  // Summary uses the selected month filter (or current month if none selected)
+  const selectedMonth = document.getElementById('exp-filter-month')?.value || thisMonth;
+  const selectedDate  = document.getElementById('exp-filter-date')?.value;
+  const isToday       = !selectedDate || selectedDate === today;
+  const monthLabel    = selectedMonth === thisMonth ? 'This Month' :
+    new Date(selectedMonth + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
   const todayExp    = expenses.filter(e => e.date === today);
-  const monthExp    = expenses.filter(e => e.date?.startsWith(thisMonth));
+  const monthExp    = expenses.filter(e => e.date?.startsWith(selectedMonth));
   const todayTotal  = todayExp.reduce((s, e) => s + Number(e.amount || 0), 0);
   const monthTotal  = monthExp.reduce((s, e) => s + Number(e.amount || 0), 0);
   const monthShoot  = monthExp.filter(e => e.is_shoot).reduce((s, e) => s + Number(e.amount || 0), 0);
@@ -3365,9 +3371,9 @@ function renderExpenses() {
 
   document.getElementById('exp-summary').innerHTML = `
     <div class="mcard warning"><div class="mcard-label">Today's Expenses</div><div class="mcard-val">₹${todayTotal.toLocaleString('en-IN')}</div><div class="mcard-sub">${todayExp.length} entr${todayExp.length === 1 ? 'y' : 'ies'}</div></div>
-    <div class="mcard danger"><div class="mcard-label">This Month Total</div><div class="mcard-val">₹${monthTotal.toLocaleString('en-IN')}</div><div class="mcard-sub">${monthExp.length} entries</div></div>
-    <div class="mcard purple"><div class="mcard-label">Shoot Expenses</div><div class="mcard-val">₹${monthShoot.toLocaleString('en-IN')}</div><div class="mcard-sub">this month</div></div>
-    <div class="mcard info"><div class="mcard-label">Office / General</div><div class="mcard-val">₹${monthOffice.toLocaleString('en-IN')}</div><div class="mcard-sub">this month</div></div>`;
+    <div class="mcard danger"><div class="mcard-label">${monthLabel} Total</div><div class="mcard-val">₹${monthTotal.toLocaleString('en-IN')}</div><div class="mcard-sub">${monthExp.length} entries</div></div>
+    <div class="mcard purple"><div class="mcard-label">Shoot Expenses</div><div class="mcard-val">₹${monthShoot.toLocaleString('en-IN')}</div><div class="mcard-sub">${monthLabel.toLowerCase()}</div></div>
+    <div class="mcard info"><div class="mcard-label">Office / General</div><div class="mcard-val">₹${monthOffice.toLocaleString('en-IN')}</div><div class="mcard-sub">${monthLabel.toLowerCase()}</div></div>`;
 
   // Update filter dropdowns
   const members    = [...new Set(expenses.map(e => e.member_name).filter(Boolean))].sort();
